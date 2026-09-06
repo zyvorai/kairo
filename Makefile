@@ -1,3 +1,5 @@
+# Copyright 2026 Zyvor AI Labs · https://zyvor.dev
+# SPDX-License-Identifier: Apache-2.0
 .PHONY: build test vet fmt check run test-e2e zip deploy-remote smoke-remote
 
 build:
