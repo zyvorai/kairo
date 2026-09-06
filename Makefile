@@ -28,4 +28,4 @@ deploy-remote:
 	bash scripts/deploy-remote.sh $(ARGS)
 
 smoke-remote:
-	bash scripts/smoke-remote.sh
+	bash scripts/smoke-remote.sh $(ARGS)

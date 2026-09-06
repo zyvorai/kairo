@@ -47,11 +47,18 @@ make build
 Cross-compiles locally and installs Kairo as a systemd service over SSH (same pattern as Chimera/Scout):
 
 ```bash
-# Default port 8080, or set KAIRO_PORT
+# Explicit port (CLI flag)
+./scripts/deploy-remote.sh 212.8.248.187 sus --port 19615
+
+# Or via env
 KAIRO_PORT=19615 ./scripts/deploy-remote.sh 212.8.248.187 sus
 
-# Smoke an existing instance
+# Omit port → reuse .deploy-last PORT, else pick random 18000–28999
+./scripts/deploy-remote.sh 212.8.248.187 sus
+
+# Smoke (URL, --port, env, or .deploy-last)
 KAIRO_URL=http://212.8.248.187:19615 ./scripts/smoke-remote.sh
+./scripts/smoke-remote.sh --port 19615
 
 # Remove
 ./scripts/deploy-remote.sh 212.8.248.187 sus --uninstall

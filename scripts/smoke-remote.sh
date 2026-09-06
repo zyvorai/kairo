@@ -7,12 +7,48 @@
 # Checks healthz, dashboard HTML, examples API, and a simulate round-trip.
 #
 # Usage:
-#   ./scripts/smoke-remote.sh
 #   KAIRO_URL=http://212.8.248.187:19615 ./scripts/smoke-remote.sh
+#   ./scripts/smoke-remote.sh --port 19615
+#   KAIRO_PORT=19615 ./scripts/smoke-remote.sh
+#   ./scripts/smoke-remote.sh   # uses HOST:PORT from .deploy-last
 #
 set -euo pipefail
 
-BASE="${KAIRO_URL:-http://127.0.0.1:8080}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PORT_FROM_CLI=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --port) [ $# -ge 2 ] || { echo "--port requires a value" >&2; exit 2; }; PORT_FROM_CLI="$2"; shift 2 ;;
+    --port=*) PORT_FROM_CLI="${1#*=}"; shift ;;
+    --help|-h)
+      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+
+BASE="${KAIRO_URL:-}"
+HOST_FROM_LAST=""
+PORT_FROM_LAST=""
+if [ -f "$ROOT/.deploy-last" ]; then
+  # shellcheck disable=SC1091
+  source "$ROOT/.deploy-last"
+  HOST_FROM_LAST="${HOST:-}"
+  PORT_FROM_LAST="${PORT:-}"
+fi
+
+if [ -z "$BASE" ]; then
+  PORT_RESOLVED="${PORT_FROM_CLI:-${KAIRO_PORT:-$PORT_FROM_LAST}}"
+  HOST_RESOLVED="${KAIRO_HOST:-$HOST_FROM_LAST}"
+  if [ -n "$HOST_RESOLVED" ] && [ -n "$PORT_RESOLVED" ]; then
+    BASE="http://${HOST_RESOLVED}:${PORT_RESOLVED}"
+  fi
+fi
+[ -n "$BASE" ] || {
+  echo "Set KAIRO_URL=http://host:port, or --port / KAIRO_PORT with host from .deploy-last" >&2
+  exit 2
+}
 BASE="${BASE%/}"
 TMPDIR_SMOKE="${TMPDIR:-/tmp}"
 

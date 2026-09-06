@@ -14,20 +14,28 @@
 #
 # Usage:
 #   ./scripts/deploy-remote.sh <host> [user] [password] [options]
-#   ./scripts/deploy-remote.sh 212.8.248.187 sus                 # SSH key auth
-#   ./scripts/deploy-remote.sh 212.8.248.187 sus mypassword      # SSH password auth
+#   ./scripts/deploy-remote.sh 212.8.248.187 sus
+#   ./scripts/deploy-remote.sh 212.8.248.187 sus --port 19615
+#   KAIRO_PORT=19615 ./scripts/deploy-remote.sh 212.8.248.187 sus
 #   ./scripts/deploy-remote.sh 212.8.248.187 sus --uninstall
 #   ./scripts/deploy-remote.sh 212.8.248.187 sus --dry-run
 #
 # Options:
+#   --port N      Listen/health-check TCP port (overrides env and .deploy-last)
 #   --uninstall   Stop kairo.service and remove it + the binary from the host
 #   --dry-run     Print what would happen; make no changes
 #   --skip-smoke  Skip the smoke-remote.sh step at the end
 #   --verbose     Show full remote command output
 #
+# Port resolution (first match wins):
+#   1. --port N
+#   2. KAIRO_PORT env
+#   3. PORT from .deploy-last (redeploy keeps the same port)
+#   4. random in 18000–28999
+#
 # Environment variables:
 #   DEPLOY_HOST, DEPLOY_USER, DEPLOY_PASS   — same as the positional args
-#   KAIRO_PORT                               — listen/health-check port (default 8080)
+#   KAIRO_PORT                               — listen/health-check port
 # ============================================================================
 
 set -euo pipefail
@@ -47,25 +55,45 @@ REMOTE_DIR=/etc/kairo
 REMOTE_ENV=/etc/kairo/kairo.env
 REMOTE_EXAMPLES=/etc/kairo/examples
 REMOTE_UNIT=/etc/systemd/system/kairo.service
-KAIRO_PORT="${KAIRO_PORT:-8080}"
 
 # ── Parse args ──
 UNINSTALL_MODE=false
 DRY_RUN=false
 SKIP_SMOKE=false
 VERBOSE=false
+PORT_FROM_CLI=""
 POSITIONAL=()
-for arg in "$@"; do
-    case "$arg" in
-        --uninstall)  UNINSTALL_MODE=true ;;
-        --dry-run)    DRY_RUN=true ;;
-        --skip-smoke) SKIP_SMOKE=true ;;
-        --verbose)    VERBOSE=true ;;
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --port)
+            [ $# -ge 2 ] || error "--port requires a value"
+            PORT_FROM_CLI="$2"
+            shift 2
+            ;;
+        --port=*)
+            PORT_FROM_CLI="${1#*=}"
+            shift
+            ;;
+        --uninstall)  UNINSTALL_MODE=true; shift ;;
+        --dry-run)    DRY_RUN=true; shift ;;
+        --skip-smoke) SKIP_SMOKE=true; shift ;;
+        --verbose)    VERBOSE=true; shift ;;
         --help|-h)
-            sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
-        *) POSITIONAL+=("$arg") ;;
+        --)
+            shift
+            POSITIONAL+=("$@")
+            break
+            ;;
+        -*)
+            error "Unknown option: $1 (see --help)"
+            ;;
+        *)
+            POSITIONAL+=("$1")
+            shift
+            ;;
     esac
 done
 
@@ -74,10 +102,33 @@ USER="${POSITIONAL[1]:-${DEPLOY_USER:-root}}"
 PASS="${POSITIONAL[2]:-${DEPLOY_PASS:-}}"
 
 kairo_parse_target HOST USER
+LAST_PORT=""
 if [ -z "$HOST" ] && kairo_load_deploy_last "$REPO_DIR"; then
     info "Using .deploy-last → ${USER}@${HOST}"
+    LAST_PORT="${PORT:-}"
+elif [ -f "$REPO_DIR/.deploy-last" ]; then
+    LAST_PORT="$(awk -F= '/^PORT=/ {print $2; exit}' "$REPO_DIR/.deploy-last")"
 fi
 [ -z "$HOST" ] && error "Usage: $0 <host> [user] [password] [options]  (see --help)"
+
+# Resolve listen port: --port > env > .deploy-last > random
+if [ -n "$PORT_FROM_CLI" ]; then
+    KAIRO_PORT="$PORT_FROM_CLI"
+elif [ -n "${KAIRO_PORT:-}" ]; then
+    :
+elif [ -n "$LAST_PORT" ]; then
+    KAIRO_PORT="$LAST_PORT"
+    info "Reusing port ${KAIRO_PORT} from .deploy-last"
+else
+    KAIRO_PORT=$((18000 + RANDOM % 11000))
+    info "Selected random port ${KAIRO_PORT}"
+fi
+case "$KAIRO_PORT" in
+    ''|*[!0-9]*) error "Invalid port: ${KAIRO_PORT} (need integer 1–65535)" ;;
+esac
+if [ "$KAIRO_PORT" -lt 1 ] || [ "$KAIRO_PORT" -gt 65535 ]; then
+    error "Port out of range: ${KAIRO_PORT} (need 1–65535)"
+fi
 
 [ -f "$REPO_DIR/go.mod" ] || error "Not in the kairo repo: $REPO_DIR"
 [ -d "$REPO_DIR/examples" ] || error "examples/ missing in $REPO_DIR"
