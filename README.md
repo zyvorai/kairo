@@ -1,10 +1,31 @@
 # Kairo
 
+[![CI](https://github.com/zyvorai/kairo/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/kairo/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.23%2B-00ADD8.svg)](go.mod)
+
+![Kairo — Kubernetes change intelligence](docs/social/kairo-share-card.png)
+
 **Know the blast radius before you deploy.**
 
-Kairo is an Apache-2.0 Kubernetes change-intelligence engine. It compares a cluster snapshot with proposed Kubernetes manifests, runs a deterministic capacity simulation, identifies high-risk object changes, and produces a machine-readable deployment verdict.
+📖 **[Architecture notes](docs/ARCHITECTURE.md)** — parser, simulation engine, and security model.
 
-The repository is intentionally dependency-light: one Go binary serves the CLI, REST API and responsive web dashboard.
+Kairo is an Apache-2.0 Kubernetes change-intelligence engine from Zyvor. It compares a cluster snapshot with proposed manifests, runs deterministic capacity simulation, identifies high-risk object changes, and produces a machine-readable deployment verdict.
+
+One dependency-light Go binary serves the CLI, REST API, and embedded web dashboard.
+
+## Contents
+
+- [What works in this release](#what-works-in-this-release)
+- [Run it](#run-it)
+- [Remote deploy](#remote-deploy)
+- [CLI](#cli)
+- [REST API](#rest-api)
+- [Get a real cluster snapshot](#get-a-real-cluster-snapshot)
+- [Docker](#docker)
+- [Development](#development)
+- [Architecture direction](#architecture-direction)
+- [License](#license)
 
 ## What works in this release
 
