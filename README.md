@@ -8,6 +8,9 @@
 
 **Know the blast radius before you deploy.**
 
+[![Book a demo](https://img.shields.io/badge/Book_a_demo-0071e3?style=for-the-badge)](https://zyvor.dev/schedule?utm_source=github&utm_medium=kairo&utm_campaign=readme_hero)
+[![30-day PoC](https://img.shields.io/badge/30--day_PoC-1d1d1f?style=for-the-badge)](https://zyvor.dev/poc?utm_source=github&utm_medium=kairo&utm_campaign=readme_hero)
+
 📖 **[Architecture notes](docs/ARCHITECTURE.md)** — parser, simulation engine, and security model.
 
 Kairo is an Apache-2.0 Kubernetes change-intelligence engine from Zyvor. It compares a cluster snapshot with proposed manifests, runs deterministic capacity simulation, identifies high-risk object changes, and produces a machine-readable deployment verdict.
@@ -192,4 +195,5 @@ See [NOTICE](NOTICE).
 ### Enterprise
 
 Production support, SLAs, and Zyvor Enterprise products are licensed separately.
-Contact [sales@zyvor.dev](mailto:sales@zyvor.dev) or see [zyvor.dev](https://zyvor.dev).
+Evaluate with the team: [Book a demo](https://zyvor.dev/schedule?utm_source=github&utm_medium=kairo&utm_campaign=readme_footer) · [30-day PoC](https://zyvor.dev/poc?utm_source=github&utm_medium=kairo&utm_campaign=readme_footer).
+Or contact [sales@zyvor.dev](mailto:sales@zyvor.dev), or see [zyvor.dev](https://zyvor.dev/?utm_source=github&utm_medium=kairo&utm_campaign=readme_edition).
