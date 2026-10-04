@@ -1,36 +1,45 @@
+<div align="center">
+
 # Kairo
 
 [![CI](https://github.com/zyvorai/kairo/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/kairo/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.23%2B-00ADD8.svg)](go.mod)
 
+[![Book a demo](https://img.shields.io/badge/Book_a_demo-0071e3?style=for-the-badge)](https://zyvor.dev/schedule?utm_source=github&utm_medium=kairo&utm_campaign=readme_hero)
+[![30-day PoC](https://img.shields.io/badge/30--day_PoC-000000?style=for-the-badge)](https://zyvor.dev/poc?utm_source=github&utm_medium=kairo&utm_campaign=readme_hero)
+[![Quickstart](https://img.shields.io/badge/Quickstart_one_Go_binary-7d7aff?style=for-the-badge)](#quickstart)
+
 ![Kairo — Kubernetes change intelligence](docs/social/kairo-hero-dark.jpg)
 
-**Know the blast radius before you deploy.**
+### Know the blast radius before you deploy.
 
-[![Book a demo](https://img.shields.io/badge/Book_a_demo-0071e3?style=for-the-badge)](https://zyvor.dev/schedule?utm_source=github&utm_medium=kairo&utm_campaign=readme_hero)
-[![30-day PoC](https://img.shields.io/badge/30--day_PoC-1d1d1f?style=for-the-badge)](https://zyvor.dev/poc?utm_source=github&utm_medium=kairo&utm_campaign=readme_hero)
+**Kubernetes change intelligence.** Kairo compares a cluster snapshot with proposed manifests, runs deterministic capacity simulation, identifies high-risk object changes, and produces a machine-readable SAFE, REVIEW or BLOCK verdict. One dependency-light Go binary serves the CLI, REST API, and embedded web dashboard.
+
+**SAFE · REVIEW · BLOCK** · **Deterministic capacity simulation** · **0 Go dependencies** · **1 binary: CLI, API, web** · **Apache-2.0**
 
 📖 **[Architecture notes](docs/ARCHITECTURE.md)** — parser, simulation engine, and security model.
 
-Kairo is an Apache-2.0 Kubernetes change-intelligence engine from Zyvor. It compares a cluster snapshot with proposed manifests, runs deterministic capacity simulation, identifies high-risk object changes, and produces a machine-readable deployment verdict.
+</div>
 
-One dependency-light Go binary serves the CLI, REST API, and embedded web dashboard.
+---
 
-## Contents
+## Why Kairo
 
-- [What works in this release](#what-works-in-this-release)
-- [Run it](#run-it)
-- [Remote deploy](#remote-deploy)
-- [CLI](#cli)
-- [REST API](#rest-api)
-- [Get a real cluster snapshot](#get-a-real-cluster-snapshot)
-- [Docker](#docker)
-- [Development](#development)
-- [Architecture direction](#architecture-direction)
-- [License](#license)
+| When this happens… | Kairo gives you… |
+|---|---|
+| A rollout leaves replicas Pending because the cluster was already full | Greedy pod-fit simulation against allocatable CPU, memory and `nvidia.com/gpu`, with unschedulable replicas reported before deploy |
+| A one-line change restarts more workloads than anyone expected | Restart and create estimates for every changed manifest |
+| Someone shrinks a PVC or tightens a NetworkPolicy in a big diff | PVC shrink detection and NetworkPolicy, CiliumNetworkPolicy and CiliumClusterwideNetworkPolicy change warnings |
+| A strict PodDisruptionBudget blocks the drain mid-change | Strict PDB detection and ResourceQuota pressure checks |
+| Reviewers read YAML diffs and guess the risk | A blast-radius score, a LOW/MEDIUM/HIGH level and a SAFE/REVIEW/BLOCK verdict |
+| CI has no way to stop a risky change | `kairo plan` exits `3` on BLOCK, with `-json` output for pipelines |
 
-## What works in this release
+![Capabilities at a glance: Ingest, Simulate, Flag, Decide](docs/ux/readme-capabilities.jpg)
+
+<a id="what-works-in-this-release"></a>
+
+### What works in this release
 
 - Multi-document Kubernetes YAML and JSON ingestion.
 - Node allocatable CPU, memory and `nvidia.com/gpu` capacity modelling.
@@ -47,9 +56,55 @@ One dependency-light Go binary serves the CLI, REST API, and embedded web dashbo
 - Docker image, health endpoint, GitHub Actions CI and unit/integration tests.
 - Remote systemd deploy + smoke (`scripts/deploy-remote.sh`).
 
-> Kairo is a pre-production decision aid, not a replacement for Kubernetes admission, the real scheduler, policy engines or progressive delivery. The in-repo YAML reader supports the common Kubernetes manifest subset and JSON; advanced YAML anchors/tags are intentionally not supported in this dependency-free release.
+---
 
-## Run it
+## Kairo vs kubectl diff
+
+![Kairo vs kubectl diff: not just what changes, what it breaks](docs/ux/readme-vs.jpg)
+
+| | **Kairo** | **`kubectl diff`** (server-side dry-run) |
+|---|---|---|
+| Question it answers | Will this change fit, and how risky is it? | What exactly will change in the live objects? |
+| Input | A cluster snapshot file plus proposed manifests | Proposed manifests against the live API server |
+| Capacity | Simulates pod fit and reports unschedulable replicas | Not checked |
+| Risk checks | PVC shrink, policy changes, strict PDBs, quota pressure | Shows the diff; judging it is up to you |
+| Output | Blast-radius score, LOW/MEDIUM/HIGH, SAFE/REVIEW/BLOCK, JSON, CI exit code | A unified diff of each object |
+| Admission and defaulting | Not modelled (Kairo is not admission) | Applied by the API server during dry-run |
+| **Choose kubectl diff when** | | You need the API server's exact result, admission webhooks and defaults included, and a diff is all you need |
+
+They work well together: `kubectl diff` for the exact object changes, Kairo for capacity and risk.
+
+---
+
+## How it fits together
+
+![Snapshot in; verdict out](docs/ux/readme-how-it-works.jpg)
+
+```text
+              Git / Helm / GitOps / CI
+                       |
+                       v
++--------------------------------------------------+
+|                 Kairo simulation                 |
+|                                                  |
+|  parse -> index live objects -> model capacity   |
+|       -> evaluate desired objects -> score       |
+|                                                  |
+|  scheduling  PVC  PDB  quota  policy  KubeVirt  |
++---------------------+----------------------------+
+                      |
+            +---------+---------+
+            |         |         |
+           CLI       REST      Web
+```
+
+Simulation lifecycle, and why the engine does not pretend to be kube-scheduler: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
+<a id="run-it"></a>
+
+## Quickstart
 
 Requires Go 1.23+.
 
@@ -64,28 +119,6 @@ Build a binary:
 ```bash
 make build
 ./bin/kairo serve
-```
-
-## Remote deploy
-
-Cross-compiles locally and installs Kairo as a systemd service over SSH (same pattern as Chimera/Scout):
-
-```bash
-# Explicit port (CLI flag)
-./scripts/deploy-remote.sh 212.8.248.187 sus --port 19615
-
-# Or via env
-KAIRO_PORT=19615 ./scripts/deploy-remote.sh 212.8.248.187 sus
-
-# Omit port → reuse .deploy-last PORT, else pick random 18000–28999
-./scripts/deploy-remote.sh 212.8.248.187 sus
-
-# Smoke (URL, --port, env, or .deploy-last)
-KAIRO_URL=http://212.8.248.187:19615 ./scripts/smoke-remote.sh
-./scripts/smoke-remote.sh --port 19615
-
-# Remove
-./scripts/deploy-remote.sh 212.8.248.187 sus --uninstall
 ```
 
 ## CLI
@@ -147,6 +180,28 @@ docker build -t kairo:dev .
 docker run --rm -p 8080:8080 kairo:dev
 ```
 
+## Remote deploy
+
+Cross-compiles locally and installs Kairo as a systemd service over SSH (same pattern as Chimera/Scout):
+
+```bash
+# Explicit port (CLI flag)
+./scripts/deploy-remote.sh 212.8.248.187 sus --port 19615
+
+# Or via env
+KAIRO_PORT=19615 ./scripts/deploy-remote.sh 212.8.248.187 sus
+
+# Omit port → reuse .deploy-last PORT, else pick random 18000–28999
+./scripts/deploy-remote.sh 212.8.248.187 sus
+
+# Smoke (URL, --port, env, or .deploy-last)
+KAIRO_URL=http://212.8.248.187:19615 ./scripts/smoke-remote.sh
+./scripts/smoke-remote.sh --port 19615
+
+# Remove
+./scripts/deploy-remote.sh 212.8.248.187 sus --uninstall
+```
+
 ## Development
 
 ```bash
@@ -183,19 +238,47 @@ The core is deliberately small enough to open-source and extend. Production-grad
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+---
+
+## Maturity
+
+> Kairo is a pre-production decision aid, not a replacement for Kubernetes admission, the real scheduler, policy engines or progressive delivery. The in-repo YAML reader supports the common Kubernetes manifest subset and JSON; advanced YAML anchors/tags are intentionally not supported in this dependency-free release.
+
+The engine does not yet execute scheduler framework plugins, topology spread, affinity/anti-affinity, taints/tolerations, CSI topology, device plugins, webhooks or controller reconciliation; those are extension points ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
+
+---
+
+## Part of the Zyvor stack
+
+| Product | Role next to Kairo |
+|---|---|
+| **Kairo** | Kubernetes change intelligence: capacity simulation, risk checks, deployment verdict |
+| **[Zorvia](https://github.com/zyvorai/zyvor-zorvia)** | Pairs with Kairo: Kairo models KubeVirt `VirtualMachine` requests, so VM changes get the same preflight |
+| **[Janus](https://github.com/zyvorai/janus)** | Pairs with Kairo: a full GPU scheduling simulator (MIG, topology, gang jobs) where Kairo models `nvidia.com/gpu` capacity only |
+| **[Haven](https://github.com/zyvorai/zyvor-haven)** | Pairs with Kairo on the same private-cloud clusters: Keycloak + HA Postgres as one identity plane |
+
+→ [zyvor.dev](https://zyvor.dev)
+
+---
+
 ## License
 
-Commercial subscriptions and support: see [docs/SUBSCRIPTION-MODEL.md](docs/SUBSCRIPTION-MODEL.md).
+Kairo is **free and open source** under the [Apache License, Version 2.0](LICENSE). You may use, modify, and run it for personal, lab, and commercial production use at no charge, subject to Apache-2.0 (preserve notices / NOTICE where required). See [NOTICE](NOTICE). That does not change.
 
-### Open source (Apache-2.0)
+**Zyvor Enterprise** adds what production teams ask for: supported releases, deployment and upgrade guidance, priority incident triage, a named technical contact and 24x7 critical intake. Production support, SLAs, and Zyvor Enterprise products are licensed separately. Plans and terms: [docs/SUBSCRIPTION-MODEL.md](docs/SUBSCRIPTION-MODEL.md) · [Pricing](https://zyvor.dev/pricing?utm_source=github&utm_medium=kairo&utm_campaign=readme_license) · [sales@zyvor.dev](mailto:sales@zyvor.dev).
 
-This repository is licensed under the [Apache License, Version 2.0](LICENSE).
-You may use, modify, and run it for personal, lab, and commercial production
-use at no charge, subject to Apache-2.0 (preserve notices / NOTICE where required).
-See [NOTICE](NOTICE).
+Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately per [SECURITY.md](SECURITY.md).
 
-### Enterprise
+---
 
-Production support, SLAs, and Zyvor Enterprise products are licensed separately.
-Evaluate with the team: [Book a demo](https://zyvor.dev/schedule?utm_source=github&utm_medium=kairo&utm_campaign=readme_footer) · [30-day PoC](https://zyvor.dev/poc?utm_source=github&utm_medium=kairo&utm_campaign=readme_footer).
-Or contact [sales@zyvor.dev](mailto:sales@zyvor.dev), or see [zyvor.dev](https://zyvor.dev/?utm_source=github&utm_medium=kairo&utm_campaign=readme_edition).
+<div align="center">
+
+### Put a verdict on every change before it ships
+
+[![Book a demo](https://img.shields.io/badge/Book_a_demo-0071e3?style=for-the-badge)](https://zyvor.dev/schedule?utm_source=github&utm_medium=kairo&utm_campaign=readme_footer)
+[![30-day PoC](https://img.shields.io/badge/Start_a_30--day_PoC-000000?style=for-the-badge)](https://zyvor.dev/poc?utm_source=github&utm_medium=kairo&utm_campaign=readme_footer)
+[![Pricing](https://img.shields.io/badge/Pricing-1d1d1f?style=for-the-badge)](https://zyvor.dev/pricing?utm_source=github&utm_medium=kairo&utm_campaign=readme_footer)
+[![Contact sales](https://img.shields.io/badge/Contact_sales-7d7aff?style=for-the-badge)](mailto:sales@zyvor.dev?subject=Kairo)
+[![Star on GitHub](https://img.shields.io/github/stars/zyvorai/kairo?style=for-the-badge&logo=github&label=Star&color=2997ff)](https://github.com/zyvorai/kairo)
+
+</div>
