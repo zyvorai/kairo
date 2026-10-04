@@ -4,7 +4,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.23%2B-00ADD8.svg)](go.mod)
 
-![Kairo — Kubernetes change intelligence](docs/social/kairo-share-card.png)
+![Kairo — Kubernetes change intelligence](docs/social/kairo-hero-dark.jpg)
 
 **Know the blast radius before you deploy.**
 
