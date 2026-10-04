@@ -8,58 +8,47 @@
   Build: ./docs/social/build-hero-dark.sh  ->  kairo-hero-dark.jpg (2400x1260)
 -->
 <style>
-  :root { --blue:#0071e3; --signal:#2997ff; --cyan:#64d2ff; --green:#30d158; --amber:#ff9f0a;
+  :root { --blue:#0071e3; --signal:#2997ff; --cyan:#64d2ff; --green:#30d158; --amber:#ff9f0a; --red:#ff453a; --violet:#bf5af2;
     --sans:'SF Pro Display','Helvetica Neue',Helvetica,Arial,sans-serif; --mono:'SF Mono',Menlo,Consolas,monospace; }
   * { box-sizing:border-box; }
   html,body { margin:0; padding:0; }
   body { width:1200px; height:630px; overflow:hidden; color:#f5f5f7; font-family:var(--sans); position:relative; background:#000; }
   .aurora { position:absolute; inset:0;
-    background:radial-gradient(720px 460px at 80% 16%, rgba(41,151,255,.40), transparent 62%),
-               radial-gradient(600px 420px at 104% 98%, rgba(100,210,255,.20), transparent 60%),
+    background:radial-gradient(720px 460px at 80% 16%, rgba(41,151,255,.34), transparent 62%),
+               radial-gradient(600px 420px at 104% 98%, rgba(100,210,255,.16), transparent 60%),
                radial-gradient(520px 380px at 6% 110%, rgba(0,113,227,.28), transparent 60%); }
-  .grid { position:absolute; inset:0; opacity:.09;
-    background-image:linear-gradient(rgba(120,180,255,.9) 1px,transparent 1px),linear-gradient(90deg,rgba(120,180,255,.9) 1px,transparent 1px);
-    background-size:44px 44px; -webkit-mask-image:radial-gradient(900px 520px at 72% 42%, #000 18%, transparent 75%); }
-  .left { position:absolute; left:60px; top:52px; width:560px; z-index:3; }
+  .copy { position:absolute; left:60px; top:52px; width:560px; z-index:3; }
   .brand { display:flex; align-items:center; gap:12px; font-family:var(--mono); font-size:14px; letter-spacing:.18em; text-transform:uppercase; color:#a1a1a6; }
   .brand b { color:#fff; }
   .word { margin:20px 0 0; font-size:112px; line-height:.95; font-weight:800; letter-spacing:-.05em; white-space:nowrap;
     background:linear-gradient(92deg,#fff 0%,#e3f0ff 38%,var(--signal) 74%,var(--cyan) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; padding-bottom:6px; }
   .tag { margin:14px 0 0; font-size:31px; line-height:1.15; font-weight:700; letter-spacing:-.02em; }
   .tag em { font-style:normal; color:var(--signal); }
-  .lede { margin:12px 0 0; font-size:18px; line-height:1.45; color:#b8b8bf; width:520px; }
+  .lede { margin:12px 0 0; font-size:18px; line-height:1.45; color:#b8b8bf; width:520px; text-shadow:0 1px 12px #000; }
   .stats { margin-top:24px; display:flex; gap:32px; }
   .stat b { display:block; font-size:34px; font-weight:800; letter-spacing:-.03em; color:#fff; }
   .stat span { font-family:var(--mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#8e8e93; }
   .pill { position:absolute; left:60px; bottom:40px; display:flex; gap:10px; z-index:3; }
-  .pill span { font-family:var(--mono); font-size:13.5px; font-weight:700; padding:7px 13px; border-radius:18px; border:1.5px solid rgba(255,255,255,.2); color:#e5e5ea; background:rgba(255,255,255,.04); }
+  .pill span { font-family:var(--mono); font-size:13.5px; font-weight:700; padding:7px 13px; border-radius:18px; border:1.5px solid rgba(255,255,255,.2); color:#e5e5ea; background:rgba(0,0,0,.6); }
   .pill span.b { background:var(--blue); border-color:var(--blue); color:#fff; box-shadow:0 0 24px rgba(0,113,227,.55); }
-
-  .right { position:absolute; left:652px; top:96px; width:560px; z-index:2; }
-  .win { position:relative; width:560px; border-radius:16px; overflow:hidden; z-index:2;
-    background:linear-gradient(180deg, rgba(22,24,30,.94), rgba(10,11,14,.96));
-    box-shadow:0 50px 100px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.14), 0 0 90px rgba(41,151,255,.22);
-    transform:perspective(1600px) rotateY(-14deg) rotateX(4deg); transform-origin:left center; }
-  .bar { height:34px; display:flex; align-items:center; gap:8px; padding:0 14px; background:rgba(255,255,255,.05); border-bottom:1px solid rgba(255,255,255,.07); }
-  .bar i { width:11px; height:11px; border-radius:50%; background:#ff5f57; } .bar i:nth-child(2){background:#febc2e} .bar i:nth-child(3){background:#28c840}
-  .bar em { margin-left:auto; margin-right:auto; font-style:normal; font-family:var(--mono); font-size:12px; color:#8e8e93; transform:translateX(-24px); }
-  .term { min-height:214px; padding:20px 22px 24px; font-family:var(--mono); font-size:15.5px; line-height:1.75; }
-  .l { white-space:pre; overflow:hidden; text-overflow:ellipsis; color:#f5f5f7; }
-  .l .p { color:var(--signal); font-weight:700; }
-  .l.out { color:#a1a1a6; }
-  .l.cm { color:#6e6e73; }
-  .l.ok { color:#d1f7dc; } .l.ok span { color:var(--green); font-weight:700; }
-  .l.warn { color:#ffe1b0; } .l.warn span { color:var(--amber); font-weight:700; }
-  .cur { display:inline-block; width:9px; height:18px; background:var(--signal); vertical-align:-3px; box-shadow:0 0 12px var(--signal); }
-  .chips { margin:34px 0 0 38px; width:480px; display:flex; flex-wrap:wrap; gap:10px; position:relative; z-index:3; }
-  .chips span { font-family:var(--mono); font-size:13px; font-weight:700; letter-spacing:.04em; padding:7px 12px; border-radius:14px;
-    color:#cfe6ff; background:rgba(10,20,35,.82); border:1px solid rgba(41,151,255,.45); box-shadow:0 0 18px rgba(41,151,255,.18); }
+  .art { position:absolute; left:520px; top:0; width:680px; height:630px; z-index:2; }
+  .art svg { display:block; }
+  #labels { position:absolute; inset:0; z-index:4; pointer-events:none; }
+  .lbl { position:absolute; font-family:var(--mono); font-size:12.5px; color:#a1a1a6; text-align:center; transform:translate(-50%,-50%); white-space:nowrap; }
+  .lbl b { display:block; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#e5e5ea; }
+  .lbl span { display:block; margin-top:3px; }
+  .lbl.box { padding:7px 12px; border-radius:12px; background:rgba(8,10,14,.85); border:1px solid rgba(255,255,255,.14); }
+  .lbl.chip { padding:6px 11px; border-radius:13px; font-size:12.5px; font-weight:700; color:#cfe6ff; background:rgba(10,20,35,.85); border:1px solid rgba(41,151,255,.5); box-shadow:0 0 16px rgba(41,151,255,.2); }
+  .lbl.left { transform:translate(0,-50%); text-align:left; }
+  .lbl.right { transform:translate(-100%,-50%); text-align:right; }
+  .ok { color:var(--green) !important; } .warn { color:var(--amber) !important; } .bad { color:var(--red) !important; } .sig { color:var(--signal) !important; } .cy { color:var(--cyan) !important; } .vi { color:var(--violet) !important; }
 </style>
 </head>
 <body>
 <div class="aurora"></div>
-<div class="grid"></div>
-<div class="left">
+<div class="art"><svg id="art" width="680" height="630" viewBox="0 0 680 630" xmlns="http://www.w3.org/2000/svg"></svg></div>
+<div id="labels"></div>
+<div class="copy">
   <div class="brand"><svg viewBox="0 0 64 64" width="30" height="30" aria-hidden="true"><defs><linearGradient id="zb" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ff5a15"/><stop offset="1" stop-color="#cc420a"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#zb)"/><path d="M18.5,20.5 45.5,20.5 18.5,43.5 45.5,43.5" fill="none" stroke="#fff" stroke-width="8.3" stroke-linecap="round" stroke-linejoin="round"/></svg><b>Zyvor</b><span>&middot;</span><span>Kubernetes change intelligence</span></div>
   <div class="word">Kairo</div>
   <div class="tag">Know the blast radius<br><em>before you deploy.</em></div>
@@ -67,8 +56,79 @@
   <div class="stats"><div class="stat"><b>0</b><span>Go dependencies</span></div><div class="stat"><b>3</b><span>verdict levels</span></div><div class="stat"><b>1</b><span>binary</span></div></div>
 </div>
 <div class="pill"><span class="b">github.com/zyvorai/kairo</span><span>Apache-2.0</span></div>
-<div class="right"><div class="win"><div class="bar"><i></i><i></i><i></i><em>kairo</em></div>
-<div class="term"><div class="l"><span class="p">$</span> cd examples</div><div class="l"><span class="p">$</span> kairo plan -cluster cluster.yaml -f desired.yaml</div><div class="l out">Objects: 12 analyzed - 2 changed - 2 created</div><div class="l out">Pods: 8 restarted - 0 created - 4 unschedulable</div><div class="l warn"><span>!</span> Verdict: BLOCK  Risk: HIGH  Blast radius: 100/100</div><div class="l"><span class="p">$</span> <i class="cur"></i></div></div></div>
-<div class="chips"><span>Go</span><span>Kubernetes</span><span>KubeVirt</span><span>Cilium</span><span>REST API</span></div></div>
+<script>
+var Z = (function () {
+  var NS = 'http://www.w3.org/2000/svg', svg = document.getElementById('art'), labels = document.getElementById('labels');
+  var seed = 20261004;
+  function rnd() { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
+  function el(tag, a, parent) { var n = document.createElementNS(NS, tag); for (var k in a) n.setAttribute(k, a[k]); (parent || svg).appendChild(n); return n; }
+  function g(attrs) { return el('g', attrs || {}); }
+  function label(x, y, inner, cls, style) { var d = document.createElement('div'); d.className = 'lbl ' + (cls || ''); d.style.left = (520 + x) + 'px'; d.style.top = y + 'px'; if (style) d.setAttribute('style', d.getAttribute('style') + ';' + style); d.innerHTML = inner; labels.appendChild(d); return d; }
+  return { NS: NS, svg: svg, W: 680, H: 630, rnd: rnd, el: el, g: g, label: label,
+    reseed: function (s) { seed = s; },
+    c: { blue: '#0071e3', signal: '#2997ff', cyan: '#64d2ff', green: '#30d158', amber: '#ff9f0a', red: '#ff453a', violet: '#bf5af2', teal: '#40c8e0', indigo: '#5e5ce6', pink: '#ff375f', white: '#f5f5f7', grey: '#8e8e93' } };
+})();
+(function () {
+// Kairo: a diff gutter of +/- lines whose changed strands flow into a three-sector SAFE / REVIEW / BLOCK verdict dial.
+var C = Z.c, hx = 470, hy = 360, DR = 158, D2R = Math.PI / 180;
+var defs = Z.el('defs', {});
+defs.innerHTML = '<filter id="kagl" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>' +
+  '<filter id="kasf" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="16"/></filter>';
+function pt(r, a) { return [hx + r * Math.cos(a * D2R), hy + r * Math.sin(a * D2R)]; }
+function sector(r0, r1, a0, a1) {
+  var p0 = pt(r1, a0), p1 = pt(r1, a1), p2 = pt(r0, a1), p3 = pt(r0, a0);
+  return 'M' + p0 + ' A' + r1 + ',' + r1 + ' 0 0 1 ' + p1 + ' L' + p2 + ' A' + r0 + ',' + r0 + ' 0 0 0 ' + p3 + 'Z';
+}
+// diff gutter
+var gx = 104, gy = 140, lh = 15, n = 24, kinds = [];
+for (var i = 0; i < n; i++) {
+  var v = Z.rnd(), k = v < 0.2 ? '+' : v < 0.32 ? '-' : ' ';
+  if (i === 6 || i === 7 || i === 15) k = '+';
+  if (i === 11) k = '-';
+  kinds.push(k);
+}
+Z.el('rect', { x: gx - 8, y: gy - 14, width: 168, height: n * lh + 18, rx: 10, fill: 'rgba(8,12,20,.45)' });
+var strands = [];
+kinds.forEach(function (k, i) {
+  var y = gy + i * lh, len = 40 + Z.rnd() * 90, ind = (Z.rnd() < 0.5 ? 0 : 1) * 12;
+  var col = k === '+' ? C.green : k === '-' ? C.red : 'rgba(160,180,210,1)';
+  if (k !== ' ') Z.el('rect', { x: gx - 8, y: y - 6, width: 168, height: 13, fill: col, opacity: .08 });
+  Z.el('rect', { x: gx, y: y - 5, width: 3, height: 11, rx: 1, fill: k === ' ' ? 'rgba(255,255,255,.1)' : col, opacity: k === ' ' ? 1 : .95 });
+  Z.el('rect', { x: gx + 12 + ind, y: y - 2, width: len, height: 4, rx: 2, fill: col, opacity: k === ' ' ? .18 : .75 });
+  if (k !== ' ') strands.push([gx + 12 + ind + len, y, col]);
+});
+// ribbon strands flowing into the hub
+Z.el('circle', { cx: hx, cy: hy, r: 120, fill: C.signal, opacity: .12, filter: 'url(#kasf)' });
+strands.forEach(function (s, i) {
+  var ty = hy - 10 + i * (20 / Math.max(1, strands.length - 1));
+  var d = 'M' + s[0] + ',' + s[1] + ' C' + (s[0] + 120) + ',' + s[1] + ' ' + (hx - 180) + ',' + ty + ' ' + (hx - 30) + ',' + ty;
+  Z.el('path', { d: d, fill: 'none', stroke: s[2], 'stroke-width': 4, opacity: .12 });
+  Z.el('path', { d: d, fill: 'none', stroke: s[2], 'stroke-width': 1.4, opacity: .85, filter: 'url(#kagl)' });
+});
+// verdict dial: upper semicircle, three sectors
+var secs = [[180, 238, C.green, 'SAFE'], [240, 300, C.amber, 'REVIEW'], [302, 360, C.red, 'BLOCK']];
+secs.forEach(function (s) {
+  Z.el('path', { d: sector(DR - 30, DR, s[0], s[1]), fill: s[2], opacity: s[3] === 'REVIEW' ? .9 : .32, filter: s[3] === 'REVIEW' ? 'url(#kagl)' : 'none' });
+  for (var a = s[0] + 4; a < s[1] - 2; a += 6) {
+    var p = pt(DR + 8, a), q = pt(DR + 14, a);
+    Z.el('line', { x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: s[2], opacity: .5 });
+  }
+});
+Z.el('path', { d: 'M' + pt(DR - 44, 180) + ' A' + (DR - 44) + ',' + (DR - 44) + ' 0 0 1 ' + pt(DR - 44, 360), fill: 'none', stroke: 'rgba(255,255,255,.1)', 'stroke-dasharray': '2 5' });
+Z.el('line', { x1: hx - DR - 10, y1: hy, x2: hx + DR + 10, y2: hy, stroke: 'rgba(255,255,255,.14)' });
+// needle on REVIEW
+var na = 255, tip = pt(DR - 18, na), bl = pt(10, na - 90), br = pt(10, na + 90);
+Z.el('path', { d: 'M' + bl + ' L' + tip + ' L' + br + 'Z', fill: '#fff', filter: 'url(#kagl)' });
+Z.el('circle', { cx: hx, cy: hy, r: 24, fill: 'rgba(6,10,18,.95)', stroke: C.amber, 'stroke-width': 2, filter: 'url(#kagl)' });
+Z.el('circle', { cx: hx, cy: hy, r: 6, fill: C.amber });
+var lp = function (a) { return pt(DR - 54, a); };
+var l1 = lp(212), l2 = lp(286), l3 = lp(328);
+Z.label(l1[0], l1[1], '<b class="ok">SAFE</b>');
+Z.label(l2[0] + 6, l2[1], '<b class="warn">REVIEW</b>');
+Z.label(l3[0], l3[1], '<b class="bad">BLOCK</b>');
+Z.label(hx, hy + 56, '<b>blast radius</b><span>simulated before deploy</span>');
+Z.label(gx + 76, gy - 36, '<span style="margin:0">cluster.yaml &rarr; desired.yaml</span>');
+})();
+</script>
 </body>
 </html>
