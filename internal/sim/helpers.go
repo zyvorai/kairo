@@ -93,7 +93,7 @@ func parseBytes(v any) int64 {
 	units := []struct {
 		suffix string
 		mult   float64
-	}{{"Ki", 1024}, {"Mi", math.Pow(1024, 2)}, {"Gi", math.Pow(1024, 3)}, {"Ti", math.Pow(1024, 4)}, {"K", 1e3}, {"M", 1e6}, {"G", 1e9}, {"T", 1e12}}
+	}{{"Ki", 1024}, {"Mi", math.Pow(1024, 2)}, {"Gi", math.Pow(1024, 3)}, {"Ti", math.Pow(1024, 4)}, {"Pi", math.Pow(1024, 5)}, {"Ei", math.Pow(1024, 6)}, {"K", 1e3}, {"M", 1e6}, {"G", 1e9}, {"T", 1e12}, {"P", 1e15}, {"E", 1e18}}
 	for _, u := range units {
 		if strings.HasSuffix(s, u.suffix) {
 			f, _ := strconv.ParseFloat(strings.TrimSuffix(s, u.suffix), 64)

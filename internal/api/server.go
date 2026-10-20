@@ -5,6 +5,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/zyvorai/kairo/internal/sim"
 	"io"
 	"log/slog"
@@ -35,7 +36,12 @@ func (s Server) Handler() http.Handler {
 func (s Server) simulate(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<20))
 	if err != nil {
-		writeJSON(w, 413, map[string]string{"error": "request too large"})
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeJSON(w, 413, map[string]string{"error": "request too large"})
+		} else {
+			writeJSON(w, 400, map[string]string{"error": "could not read request body"})
+		}
 		return
 	}
 	var req sim.Request
