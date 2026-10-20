@@ -38,3 +38,36 @@ spec:
 		t.Fatalf("resources %#v", r)
 	}
 }
+
+func TestParseIndentlessSequence(t *testing.T) {
+	src := `kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+      - name: api
+        resources:
+          requests:
+            cpu: 500m
+      - name: side
+        image: x
+  paused: false
+`
+	d, err := ParseDocuments(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := asSlice(get(d[0], "spec", "template", "spec", "containers"))
+	if len(cs) != 2 {
+		t.Fatalf("got %d containers", len(cs))
+	}
+	if get(d[0], "spec", "paused") != false {
+		t.Fatal("key after indentless sequence lost")
+	}
+	if r := resourceReq(podSpecFor(d[0])); r.cpu != 0.5 {
+		t.Fatalf("resources %#v", r)
+	}
+}

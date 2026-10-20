@@ -10,6 +10,9 @@ import (
 	"strings"
 )
 
+// maxReplicas bounds per-object replicas so untrusted input cannot pin the CPU.
+const maxReplicas = 100000
+
 type nodeState struct {
 	name string
 	cap  resources
@@ -38,6 +41,27 @@ func Simulate(req Request) (Result, error) {
 	desiredMap := map[string]map[string]any{}
 	for _, o := range desired {
 		desiredMap[keyFor(o)] = o
+	}
+	// A repeated object replaces the earlier one (as kubectl apply would), so
+	// it must not be scheduled twice.
+	deduped := make([]map[string]any, 0, len(desiredMap))
+	seen := map[string]bool{}
+	for i := len(desired) - 1; i >= 0; i-- {
+		k := keyFor(desired[i])
+		if !seen[k] {
+			seen[k] = true
+			deduped = append(deduped, desired[i])
+		}
+	}
+	for i, j := 0, len(deduped)-1; i < j; i, j = i+1, j-1 {
+		deduped[i], deduped[j] = deduped[j], deduped[i]
+	}
+	desired = deduped
+	for _, o := range desired {
+		if r := replicasFor(o, 0); r > maxReplicas {
+			_, ns, name := metadata(o)
+			return Result{}, fmt.Errorf("%s %s/%s: replicas %d exceeds the supported maximum of %d", str(o["kind"]), ns, name, r, maxReplicas)
+		}
 	}
 	for k, o := range desiredMap {
 		if old, ok := live[k]; !ok {

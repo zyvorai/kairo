@@ -61,3 +61,27 @@ spec:
 		t.Fatalf("pvc risks=%d", r.PVCDestructiveRisks)
 	}
 }
+
+func TestSimulateRejectsHugeReplicas(t *testing.T) {
+	_, err := Simulate(Request{ClusterYAML: "kind: Node\nmetadata:\n  name: n1\n", DesiredYAML: "kind: Deployment\nmetadata:\n  name: a\nspec:\n  replicas: 2000000000\n  template:\n    spec:\n      containers:\n      - name: a\n"})
+	if err == nil {
+		t.Fatal("expected error for huge replicas")
+	}
+}
+
+func TestSimulateDuplicateDesiredScheduledOnce(t *testing.T) {
+	dep := "kind: Deployment\nmetadata:\n  name: a\nspec:\n  replicas: 2\n  template:\n    spec:\n      containers:\n      - name: a\n"
+	res, err := Simulate(Request{ClusterYAML: "kind: Node\nmetadata:\n  name: n1\n", DesiredYAML: dep + "---\n" + dep})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.PodsCreated != 2 {
+		t.Fatalf("PodsCreated = %d, want 2", res.PodsCreated)
+	}
+}
+
+func TestParseBytesLargeUnits(t *testing.T) {
+	if parseBytes("1Pi") != 1<<50 || parseBytes("1P") != 1e15 || parseBytes("1Ei") != 1<<60 {
+		t.Fatal("large suffixes not parsed")
+	}
+}

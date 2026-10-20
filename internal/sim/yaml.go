@@ -166,6 +166,14 @@ func parseMap(lines []yamlLine, idx, indent int) (map[string]any, int, error) {
 			}
 			m[unquote(key)] = child
 			idx = next
+		} else if idx < len(lines) && lines[idx].indent == indent && (strings.HasPrefix(lines[idx].text, "- ") || lines[idx].text == "-") {
+			// Indentless sequence, as emitted by kubectl: "key:\n- item".
+			child, next, err := parseSequence(lines, idx, indent)
+			if err != nil {
+				return nil, idx, err
+			}
+			m[unquote(key)] = child
+			idx = next
 		} else {
 			m[unquote(key)] = nil
 		}
