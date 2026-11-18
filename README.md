@@ -22,6 +22,8 @@
 
 </div>
 
+[Client overview (PDF)](docs/Kairo-Client-Overview.pdf)
+
 ---
 
 ## Why Kairo
