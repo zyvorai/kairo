@@ -1,0 +1,73 @@
+// Copyright 2026 Zyvor AI Labs · https://zyvor.dev
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+
+package sim
+
+import "testing"
+
+func TestParseKubernetesYAML(t *testing.T) {
+	src := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: api
+          image: example/api:v2
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+`
+	d, err := ParseDocuments(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d) != 1 {
+		t.Fatalf("got %d docs", len(d))
+	}
+	if intValue(get(d[0], "spec", "replicas"), 0) != 3 {
+		t.Fatal("replicas not parsed")
+	}
+	spec := podSpecFor(d[0])
+	r := resourceReq(spec)
+	if r.cpu != 0.5 || r.mem != 1073741824 {
+		t.Fatalf("resources %#v", r)
+	}
+}
+
+func TestParseIndentlessSequence(t *testing.T) {
+	src := `kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+      - name: api
+        resources:
+          requests:
+            cpu: 500m
+      - name: side
+        image: x
+  paused: false
+`
+	d, err := ParseDocuments(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := asSlice(get(d[0], "spec", "template", "spec", "containers"))
+	if len(cs) != 2 {
+		t.Fatalf("got %d containers", len(cs))
+	}
+	if get(d[0], "spec", "paused") != false {
+		t.Fatal("key after indentless sequence lost")
+	}
+	if r := resourceReq(podSpecFor(d[0])); r.cpu != 0.5 {
+		t.Fatalf("resources %#v", r)
+	}
+}

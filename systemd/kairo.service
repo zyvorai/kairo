@@ -1,0 +1,23 @@
+[Unit]
+Description=Kairo Kubernetes change-intelligence engine
+Documentation=https://github.com/zyvorai/kairo
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/etc/kairo
+EnvironmentFile=-/etc/kairo/kairo.env
+ExecStart=/usr/local/bin/kairo serve -addr ${KAIRO_ADDR}
+Restart=on-failure
+RestartSec=5s
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/etc/kairo
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kairo
+
+[Install]
+WantedBy=multi-user.target

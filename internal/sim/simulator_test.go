@@ -1,0 +1,87 @@
+// Copyright 2026 Zyvor AI Labs · https://zyvor.dev
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+
+package sim
+
+import "testing"
+
+func TestBlocksUnschedulableAndPVCShrink(t *testing.T) {
+	cluster := `apiVersion: v1
+kind: Node
+metadata: {"name":"n1"}
+status:
+  allocatable:
+    cpu: "2"
+    memory: 4Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+spec:
+  resources:
+    requests:
+      storage: 100Gi
+`
+	desired := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: api
+          resources:
+            requests:
+              cpu: "2"
+              memory: 3Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+spec:
+  resources:
+    requests:
+      storage: 50Gi
+`
+	r, err := Simulate(Request{cluster, desired})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Verdict != "BLOCK" {
+		t.Fatalf("verdict=%s", r.Verdict)
+	}
+	if r.UnschedulablePods < 1 {
+		t.Fatal("expected unschedulable")
+	}
+	if r.PVCDestructiveRisks != 1 {
+		t.Fatalf("pvc risks=%d", r.PVCDestructiveRisks)
+	}
+}
+
+func TestSimulateRejectsHugeReplicas(t *testing.T) {
+	_, err := Simulate(Request{ClusterYAML: "kind: Node\nmetadata:\n  name: n1\n", DesiredYAML: "kind: Deployment\nmetadata:\n  name: a\nspec:\n  replicas: 2000000000\n  template:\n    spec:\n      containers:\n      - name: a\n"})
+	if err == nil {
+		t.Fatal("expected error for huge replicas")
+	}
+}
+
+func TestSimulateDuplicateDesiredScheduledOnce(t *testing.T) {
+	dep := "kind: Deployment\nmetadata:\n  name: a\nspec:\n  replicas: 2\n  template:\n    spec:\n      containers:\n      - name: a\n"
+	res, err := Simulate(Request{ClusterYAML: "kind: Node\nmetadata:\n  name: n1\n", DesiredYAML: dep + "---\n" + dep})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.PodsCreated != 2 {
+		t.Fatalf("PodsCreated = %d, want 2", res.PodsCreated)
+	}
+}
+
+func TestParseBytesLargeUnits(t *testing.T) {
+	if parseBytes("1Pi") != 1<<50 || parseBytes("1P") != 1e15 || parseBytes("1Ei") != 1<<60 {
+		t.Fatal("large suffixes not parsed")
+	}
+}
