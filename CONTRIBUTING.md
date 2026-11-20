@@ -8,4 +8,4 @@ Thanks for helping improve Kairo.
 4. Run `make check` and `make test-e2e`.
 5. Keep pull requests small enough to review and explain any blast-radius scoring change.
 
-Contributions are accepted under the Apache License 2.0.
+Contributions are accepted under the Zyvor Production License v1.0 (licensed to Zyvor AI Labs under the same terms).

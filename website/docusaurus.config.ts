@@ -88,7 +88,7 @@ const config: Config = {
           title: 'Project',
           items: [
             {label: 'GitHub', href: 'https://github.com/zyvorai/kairo'},
-            {label: 'License (Apache-2.0)', href: 'https://github.com/zyvorai/kairo/blob/main/LICENSE'},
+            {label: 'License (Zyvor Production 1.0)', href: 'https://github.com/zyvorai/kairo/blob/main/LICENSE'},
           ],
         },
         {
@@ -99,7 +99,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Zyvor. Kairo core is Apache-2.0 licensed.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Zyvor. Kairo core is source-available under the Zyvor Production License v1.0.`,
     },
     prism: {
       theme: prismThemes.github,

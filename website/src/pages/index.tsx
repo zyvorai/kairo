@@ -85,7 +85,7 @@ function TrustBand() {
               Small on purpose
             </Heading>
             <p>
-              Apache-2.0, one Go binary, no external dependencies for the
+              Source-available, one Go binary, no external dependencies for the
               simulation engine itself. Docker image, health endpoint,
               GitHub Actions CI, and unit/integration tests are all part of
               this release.
@@ -94,8 +94,8 @@ function TrustBand() {
           </div>
           <div className={styles.trustBadges}>
             <img
-              src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"
-              alt="Apache 2.0 license"
+              src="https://img.shields.io/badge/license-Zyvor_Production_1.0-1d1d1f.svg"
+              alt="Zyvor Production License v1.0"
             />
           </div>
         </Reveal>
@@ -113,8 +113,7 @@ function EnterpriseCTA() {
             Need production support or SLAs?
           </Heading>
           <p className={styles.enterpriseCopy}>
-            Kairo's core is Apache-2.0 and free to run in personal, lab, and
-            commercial production use at no charge. Zyvor Enterprise adds
+            Kairo is source-available under the Zyvor Production License v1.0: free for non-production use, with a commercial license required for production. Zyvor Enterprise adds
             production support, SLAs, and additional products for teams
             that need them.
           </p>
