@@ -116,7 +116,7 @@ function EnterpriseCTA() {
             Need production support or SLAs?
           </Heading>
           <p className={styles.enterpriseCopy}>
-            Kairo is source-available under the Zyvor Production License v1.0: free for non-production use, with a commercial license required for production. Zyvor Enterprise adds
+            Kairo is source-available under the Zyvor Production License v1.0: a commercial license is required to run it. Zyvor Enterprise adds
             production support, SLAs, and additional products for teams
             that need them.
           </p>
