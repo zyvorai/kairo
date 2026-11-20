@@ -60,22 +60,6 @@
 
 ---
 
-## Kairo vs kubectl diff
-
-![Kairo vs kubectl diff: not just what changes, what it breaks](docs/ux/readme-vs.jpg)
-
-| | **Kairo** | **`kubectl diff`** (server-side dry-run) |
-|---|---|---|
-| Question it answers | Will this change fit, and how risky is it? | What exactly will change in the live objects? |
-| Input | A cluster snapshot file plus proposed manifests | Proposed manifests against the live API server |
-| Capacity | Simulates pod fit and reports unschedulable replicas | Not checked |
-| Risk checks | PVC shrink, policy changes, strict PDBs, quota pressure | Shows the diff; judging it is up to you |
-| Output | Blast-radius score, LOW/MEDIUM/HIGH, SAFE/REVIEW/BLOCK, JSON, CI exit code | A unified diff of each object |
-| Admission and defaulting | Not modelled (Kairo is not admission) | Applied by the API server during dry-run |
-| **Choose kubectl diff when** | | You need the API server's exact result, admission webhooks and defaults included, and a diff is all you need |
-
-They work well together: `kubectl diff` for the exact object changes, Kairo for capacity and risk.
-
 ---
 
 ## How it fits together
