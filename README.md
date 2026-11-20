@@ -60,8 +60,6 @@
 
 ---
 
----
-
 ## How it fits together
 
 ![Snapshot in; verdict out](docs/ux/readme-how-it-works.jpg)
