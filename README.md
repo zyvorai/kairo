@@ -16,7 +16,7 @@
 
 **Kubernetes change intelligence.** Kairo compares a cluster snapshot with proposed manifests, runs deterministic capacity simulation, identifies high-risk object changes, and produces a machine-readable SAFE, REVIEW or BLOCK verdict. One dependency-light Go binary serves the CLI, REST API, and embedded web dashboard.
 
-**SAFE · REVIEW · BLOCK** · **Deterministic capacity simulation** · **0 Go dependencies** · **1 binary: CLI, API, web** · **Zyvor Production License v1.0**
+**SAFE · REVIEW · BLOCK** · **Deterministic capacity simulation** · **0 Go dependencies** · **1 binary: CLI, API, web** · **Zyvor Production Licence v2.0**
 
 📖 **[Architecture notes](docs/ARCHITECTURE.md)** — parser, simulation engine, and security model.
 
@@ -247,11 +247,11 @@ The engine does not yet execute scheduler framework plugins, topology spread, af
 
 ## Support
 
-A commercial license is required under the Zyvor Production License v1.0 (sales@zyvor.dev). If it helps you, you can donate any amount you like: <https://rzp.io/rzp/utwdYh3>. A donation is voluntary and supports development and maintenance. It is not a purchase: it buys no support, SLA, features, priority or license, and it is not tax-deductible (Zyvor AI Labs Private Limited is a company, not a charity). Support contracts are separate: [sales@zyvor.dev](mailto:sales@zyvor.dev).
+A 30-day trial is available on request from sales@zyvor.dev (a paid evaluation Order at no charge); production and any other use needs a paid Order under the Zyvor Production Licence v2.0. If it helps you, you can donate any amount you like: <https://rzp.io/rzp/utwdYh3>. A donation is voluntary and supports development and maintenance. It is not a purchase: it buys no support, SLA, features, priority or license, and it is not tax-deductible (Zyvor AI Labs Private Limited is a company, not a charity). Support contracts are separate: [sales@zyvor.dev](mailto:sales@zyvor.dev).
 
 ## License
 
-Kairo is source-available under the **[Zyvor Production License v1.0](LICENSE)** (SPDX `LicenseRef-Zyvor-Production-1.0`, also in [LICENSES/](LICENSES/LicenseRef-Zyvor-Production-1.0.txt); see [NOTICE](NOTICE)). Evaluation (evaluation, development, testing, research, education) is free for 30 days per organization. Production use needs a commercial license from Zyvor AI Labs Private Limited: [zyvor.dev/buy](https://zyvor.dev/buy) · [sales@zyvor.dev](mailto:sales@zyvor.dev). A 30-day trial key is available for production evaluation.
+Kairo is source-available under the **[Zyvor Production Licence v2.0](LICENSE)** (SPDX `LicenseRef-Zyvor-Production-2.0`, also in [LICENSES/](LICENSES/LicenseRef-Zyvor-Production-2.0.txt); see [NOTICE](NOTICE)). A 30-day trial is available on request from sales@zyvor.dev (a paid evaluation Order at no charge); production and any other use needs a paid Order under the Zyvor Production Licence v2.0. Production use needs a commercial license from Zyvor AI Labs Private Limited: [zyvor.dev/buy](https://zyvor.dev/buy) · [sales@zyvor.dev](mailto:sales@zyvor.dev). A 30-day trial key is available for production evaluation.
 
 **Price:** INR 49,999 per cluster per year incl. 18% GST in India; US$504 per cluster per year excl. tax elsewhere. Buy: [zyvor.dev/buy](https://zyvor.dev/buy). Orders of USD 5,000 or more and quotes are invoiced in USD through Skydo.
 

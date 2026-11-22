@@ -1,5 +1,5 @@
 // Copyright 2026 Zyvor AI Labs · https://zyvor.dev
-// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-2.0
 
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
@@ -98,7 +98,7 @@ function TrustBand() {
           <div className={styles.trustBadges}>
             <img
               src="https://img.shields.io/badge/license-Zyvor_Production_1.0-1d1d1f.svg"
-              alt="Zyvor Production License v1.0"
+              alt="Zyvor Production Licence v2.0"
             />
           </div>
         </Reveal>
@@ -116,7 +116,7 @@ function EnterpriseCTA() {
             Need production support or SLAs?
           </Heading>
           <p className={styles.enterpriseCopy}>
-            Kairo is source-available under the Zyvor Production License v1.0: a commercial license is required to run it. Zyvor Enterprise adds
+            Kairo is source-available under the Zyvor Production Licence v2.0: a commercial license is required to run it. Zyvor Enterprise adds
             production support, SLAs, and additional products for teams
             that need them.
           </p>
