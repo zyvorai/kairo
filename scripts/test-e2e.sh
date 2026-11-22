@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 Zyvor AI Labs · https://zyvor.dev
-# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-2.0
 set -euo pipefail
 PORT="${KAIRO_TEST_PORT:-18080}"
 LOG="${TMPDIR:-/tmp}/kairo-e2e.log"
