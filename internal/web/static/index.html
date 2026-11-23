@@ -25,6 +25,7 @@ SPDX-License-Identifier: LicenseRef-Zyvor-Production-2.0
       <div class="nav-links" aria-label="Product navigation">
         <a href="#overview">Overview</a>
         <a href="#simulation">Simulator</a>
+        <a href="#explore">Explore</a>
         <a href="#architecture">Architecture</a>
         <a href="https://github.com/zyvorai/kairo" rel="noreferrer">GitHub</a>
       </div>
@@ -140,6 +141,13 @@ SPDX-License-Identifier: LicenseRef-Zyvor-Production-2.0
             <div class="editor-tabs"><button class="tab active" data-tab="cluster">Cluster snapshot</button><button class="tab" data-tab="desired">Proposed change</button></div>
             <div class="editor-wrap"><textarea id="cluster-editor" spellcheck="false" aria-label="Cluster snapshot YAML"></textarea><textarea id="desired-editor" class="hidden" spellcheck="false" aria-label="Desired manifest YAML"></textarea></div>
             <div class="editor-footer"><span id="object-count">Ready to model</span><button class="button primary run" id="run">Run simulation <span>⌘↵</span></button></div>
+            <div class="price-row" aria-label="Optional prices for a cost estimate">
+              <span class="price-title">Prices (optional)</span>
+              <label>Node-hour<input id="price-node" type="number" min="0" step="any" inputmode="decimal" placeholder="0.00"/></label>
+              <label>GiB-hour<input id="price-gib" type="number" min="0" step="any" inputmode="decimal" placeholder="0.00"/></label>
+              <label>Currency<input id="price-cur" type="text" maxlength="16" placeholder="USD"/></label>
+              <small>Your own prices; Kairo makes no cloud API calls. Output is an estimate, not a quote.</small>
+            </div>
           </div>
 
           <aside class="result-shell" id="results">
@@ -153,10 +161,51 @@ SPDX-License-Identifier: LicenseRef-Zyvor-Production-2.0
                 <div><span>PVC risk</span><strong id="pvc">0</strong><small>destructive</small></div>
               </div>
               <div class="delta-row"><div><span>CPU delta</span><b id="cpu-delta">0</b></div><div><span>Memory delta</span><b id="mem-delta">0</b></div><div><span>GPU delta</span><b id="gpu-delta">0</b></div></div>
+              <div class="cost-box hidden" id="cost-box"><span class="label">Estimated monthly cost change</span><b id="cost-amount">—</b><p id="cost-note"></p></div>
               <div class="risk-list"><span class="label">Findings</span><div id="risks"></div></div>
               <div class="recommendations"><span class="label">Recommended next actions</span><ol id="recommendations"></ol></div>
             </div>
           </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="explore-section" id="explore">
+      <div class="section-heading reveal-on-scroll">
+        <div><p class="kicker">More simulations</p><h2>Drain. Consolidate.<br/>Upgrade.</h2></div>
+        <p>The same engine answers more than “is this change safe?”. These views run on the cluster snapshot and proposed change in the simulator above, through the same REST endpoints as the CLI.</p>
+      </div>
+      <div class="workspace reveal-on-scroll">
+        <div class="workbench-topbar">
+          <div class="explore-tabs" role="tablist" aria-label="Simulation views">
+            <button class="tab active" role="tab" aria-selected="true" data-explore="drain">Node drain</button>
+            <button class="tab" role="tab" aria-selected="false" data-explore="consolidate">Consolidation</button>
+            <button class="tab" role="tab" aria-selected="false" data-explore="rollout">Rollout surge</button>
+            <button class="tab" role="tab" aria-selected="false" data-explore="api">API removal</button>
+            <button class="tab" role="tab" aria-selected="false" data-explore="explain">Change list</button>
+          </div>
+        </div>
+        <div class="explore-body">
+          <div class="explore-pane" data-pane="drain">
+            <p class="explore-help">Cordon and drain nodes together, as in one upgrade wave. PodDisruptionBudgets, requests, selectors, taints and cordons decide whether evicted pods can land elsewhere.</p>
+            <label class="field">Nodes to drain (comma-separated)<input id="drain-nodes" type="text" spellcheck="false" autocomplete="off" placeholder="worker-a"/></label>
+            <p class="explore-help small" id="node-hint"></p>
+          </div>
+          <div class="explore-pane hidden" data-pane="consolidate">
+            <p class="explore-help">Which nodes could be emptied by repacking the existing pods onto fewer nodes, using the drain placement rules. Optional prices (set under the editors above) add a monthly estimate.</p>
+          </div>
+          <div class="explore-pane hidden" data-pane="rollout">
+            <p class="explore-help">Rolling updates surge extra pods. A change that fits at steady state can still stall or run degraded when the surge does not fit. Uses the proposed change above.</p>
+          </div>
+          <div class="explore-pane hidden" data-pane="api">
+            <p class="explore-help">Check the proposed manifests against the API versions the target Kubernetes release still serves.</p>
+            <label class="field">Target Kubernetes version<select id="api-target"></select></label>
+          </div>
+          <div class="explore-pane hidden" data-pane="explain">
+            <p class="explore-help">What changes per object: replicas, images, requests and limits, as the CLI’s <code>plan -explain</code> prints.</p>
+          </div>
+          <div class="explore-actions"><button class="button primary run" id="explore-run">Run <span>simulation</span></button><span class="explore-status" id="explore-status" role="status"></span></div>
+          <div class="explore-result" id="explore-result" aria-live="polite"></div>
         </div>
       </div>
     </section>
