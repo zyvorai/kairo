@@ -16,6 +16,9 @@ import (
 	"time"
 )
 
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -27,14 +30,14 @@ func main() {
 	case "plan":
 		plan(os.Args[2:])
 	case "version":
-		fmt.Println("kairo dev")
+		fmt.Println("kairo", version)
 	default:
 		usage()
 		os.Exit(2)
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "Kairo — know the blast radius before you deploy\n\nUsage:\n  kairo serve [-addr :8080]\n  kairo plan -cluster snapshot.yaml -f desired.yaml [-json]\n  kairo version")
+	fmt.Fprintln(os.Stderr, "Kairo — know the blast radius before you deploy\n\nUsage:\n  kairo serve [-addr :8080]\n  kairo plan -cluster snapshot.yaml -f desired.yaml [-format text|json|markdown] [-fail-on BLOCK|REVIEW|never]\n  kairo version")
 }
 func serve(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
@@ -54,8 +57,18 @@ func plan(args []string) {
 	fs := flag.NewFlagSet("plan", flag.ExitOnError)
 	clusterPath := fs.String("cluster", "", "cluster snapshot YAML/JSON")
 	desiredPath := fs.String("f", "", "desired manifest YAML/JSON")
-	asJSON := fs.Bool("json", false, "print JSON")
+	asJSON := fs.Bool("json", false, "print JSON (same as -format json)")
+	format := fs.String("format", "text", "output format: text, json or markdown")
+	failOn := fs.String("fail-on", "BLOCK", "exit 3 when the verdict is at least this: BLOCK, REVIEW or never")
 	_ = fs.Parse(args)
+	if *asJSON {
+		*format = "json"
+	}
+	threshold, ok := map[string]int{"BLOCK": 2, "REVIEW": 1, "never": 3}[*failOn]
+	if !ok || (*format != "text" && *format != "json" && *format != "markdown") {
+		fmt.Fprintln(os.Stderr, "error: -format must be text, json or markdown; -fail-on must be BLOCK, REVIEW or never")
+		os.Exit(2)
+	}
 	if *clusterPath == "" || *desiredPath == "" {
 		fs.Usage()
 		os.Exit(2)
@@ -72,17 +85,20 @@ func plan(args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	if *asJSON {
+	switch *format {
+	case "json":
 		b, _ := json.MarshalIndent(r, "", "  ")
 		fmt.Println(string(b))
-	} else {
+	case "markdown":
+		fmt.Print(sim.Markdown(r))
+	default:
 		fmt.Println(sim.SummaryText(r))
 		fmt.Println("\nRecommendations:")
 		for _, x := range r.Recommendations {
 			fmt.Println("-", x)
 		}
 	}
-	if r.Verdict == "BLOCK" {
+	if sim.Rank(r.Verdict) >= threshold {
 		os.Exit(3)
 	}
 }

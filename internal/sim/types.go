@@ -46,6 +46,9 @@ type Result struct {
 	PVCDestructiveRisks  int          `json:"pvcDestructiveRisks"`
 	PDBRisks             int          `json:"pdbRisks"`
 	QuotaRisks           int          `json:"quotaRisks"`
+	SecurityRisks        int          `json:"securityRisks"`
+	ExposureChanges      int          `json:"exposureChanges"`
+	RBACRisks            int          `json:"rbacRisks"`
 	CPUDeltaCores        float64      `json:"cpuDeltaCores"`
 	MemoryDeltaBytes     int64        `json:"memoryDeltaBytes"`
 	GPUDelta             int64        `json:"gpuDelta"`

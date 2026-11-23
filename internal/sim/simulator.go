@@ -106,6 +106,12 @@ func Simulate(req Request) (Result, error) {
 				res.Risks = append(res.Risks, Risk{"high", "UNSCHEDULABLE", "Workload cannot fully schedule", fmt.Sprintf("%d of %d replicas cannot fit on the current node capacity.", unscheduled, replicas), ResourceRef{kind, ns, name}})
 			}
 		}
+		if rs, c := extraRisks(obj, old); len(rs) > 0 {
+			res.Risks = append(res.Risks, rs...)
+			res.SecurityRisks += c.security
+			res.ExposureChanges += c.exposure
+			res.RBACRisks += c.rbac
+		}
 		switch kind {
 		case "NetworkPolicy", "CiliumNetworkPolicy", "CiliumClusterwideNetworkPolicy":
 			res.NetworkPolicyChanges++
@@ -141,6 +147,9 @@ func Simulate(req Request) (Result, error) {
 	score += res.QuotaRisks * 25
 	score += res.PDBRisks * 12
 	score += minInt(15, res.NetworkPolicyChanges*8)
+	score += minInt(30, res.SecurityRisks*15)
+	score += minInt(16, res.ExposureChanges*8)
+	score += minInt(45, res.RBACRisks*20)
 	if res.PodsRestarted > 0 {
 		score += minInt(12, int(math.Ceil(float64(res.PodsRestarted)/10)))
 	}
@@ -304,6 +313,15 @@ func recommendations(r Result) []string {
 	}
 	if r.QuotaRisks > 0 {
 		x = append(x, "Increase ResourceQuota or reduce aggregate requests before applying the change.")
+	}
+	if r.SecurityRisks > 0 {
+		x = append(x, "Remove privileged, host-namespace and hostPath settings, or document why the workload needs them.")
+	}
+	if r.ExposureChanges > 0 {
+		x = append(x, "Confirm every new Service or Ingress exposure is intended and restricted (source ranges, TLS, auth).")
+	}
+	if r.RBACRisks > 0 {
+		x = append(x, "Replace wildcard or cluster-admin grants with least-privilege roles.")
 	}
 	if len(x) == 0 {
 		x = append(x, "No blocking capacity or destructive-storage issue was detected. Continue with normal progressive delivery safeguards.")
