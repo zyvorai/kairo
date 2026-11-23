@@ -70,6 +70,43 @@ PY
 curl -fsS "http://127.0.0.1:${PORT}/" | grep -q 'id="explore"'
 curl -fsS "http://127.0.0.1:${PORT}/app.js" | grep -q '/api/v1/consolidate'
 
+# --- disruption risk, right-sizing and pool-loss resilience: CLI and API ---
+./bin/kairo disruption -cluster examples/consolidate-cluster.yaml >"${TMPDIR:-/tmp}/kairo-disruption.out"
+grep -q "BLOCKED" "${TMPDIR:-/tmp}/kairo-disruption.out"
+grep -q "Scoring model" "${TMPDIR:-/tmp}/kairo-disruption.out"
+./bin/kairo disruption -cluster examples/consolidate-cluster.yaml -format json | grep -q '"weights"'
+./bin/kairo rightsize -cluster examples/rightsize-cluster.yaml -usage examples/usage.json -node-hour-price 0.2 -currency USD >"${TMPDIR:-/tmp}/kairo-rightsize.out"
+grep -q "optimistic" "${TMPDIR:-/tmp}/kairo-rightsize.out"
+grep -q "No usage data for 1 pod container" "${TMPDIR:-/tmp}/kairo-rightsize.out"
+grep -q "Not modelled" "${TMPDIR:-/tmp}/kairo-rightsize.out"
+./bin/kairo rightsize -cluster examples/rightsize-cluster.yaml -usage examples/rightsize-cluster.yaml >/dev/null 2>&1 && { echo "rightsize: a non-JSON usage file should fail"; exit 1; }
+./bin/kairo rightsize -cluster examples/rightsize-cluster.yaml -usage examples/usage.json -cpu-percentile 7 >/dev/null 2>&1 && { echo "rightsize: bad percentile should fail"; exit 1; }
+./bin/kairo resilience -cluster examples/spot-cluster.yaml >"${TMPDIR:-/tmp}/kairo-resilience.out"
+grep -q "RESILIENCE_WORKLOAD_IN_ONE_POOL" "${TMPDIR:-/tmp}/kairo-resilience.out"
+python3 - <<PY
+import json, urllib.request
+base='http://127.0.0.1:${PORT}'
+def post(path, body):
+    req=urllib.request.Request(base+path, data=json.dumps(body).encode(), headers={'Content-Type':'application/json'}, method='POST')
+    return json.load(urllib.request.urlopen(req))
+d=post('/api/v1/disruption', {'clusterYaml': open('examples/consolidate-cluster.yaml').read()})
+assert d['nodes'][-1]['level']=='BLOCKED' and d['weights'] and d['notModelled'], d
+usage=json.load(open('examples/usage.json'))
+r=post('/api/v1/rightsize', {'clusterYaml': open('examples/rightsize-cluster.yaml').read(), 'usage': usage, 'prices': {'nodeHourPrice': 0.2}})
+assert [s['name'] for s in r['scenarios']]==['current','optimistic','expected','conservative'], r
+assert r['noUsageDataCount']==1 and r['scenarios'][2]['additionalNodesRemovable']>0, r
+assert r['containers'][0]['cpu']['basis'], r
+q=post('/api/v1/resilience', {'clusterYaml': open('examples/spot-cluster.yaml').read()})
+assert q['scenarios'] and q['findings'] and q['notModelled'], q
+try:
+    post('/api/v1/rightsize', {'clusterYaml': open('examples/rightsize-cluster.yaml').read(), 'usage': {'series':[{'workload':'api','container':'api','cpuCores':[-1]}]}})
+    raise SystemExit('negative samples should be rejected')
+except urllib.error.HTTPError as e:
+    assert e.code==422, e.code
+print('e2e disruption/rightsize/resilience ok')
+PY
+curl -fsS "http://127.0.0.1:${PORT}/app.js" | grep -q '/api/v1/rightsize'
+
 E2E_DIR="$(mktemp -d)"
 cat >"$E2E_DIR/cluster.yaml" <<'YAML'
 apiVersion: v1

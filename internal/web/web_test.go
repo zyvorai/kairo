@@ -34,7 +34,7 @@ func TestScriptElementsExist(t *testing.T) {
 			t.Errorf("app.js looks up #%s but index.html has no such element", m[1])
 		}
 	}
-	for _, view := range []string{"drain", "consolidate", "rollout", "api", "explain"} {
+	for _, view := range []string{"drain", "consolidate", "disruption", "rightsize", "resilience", "rollout", "api", "explain"} {
 		if !strings.Contains(html, `data-explore="`+view+`"`) || !strings.Contains(html, `data-pane="`+view+`"`) {
 			t.Errorf("view %q lacks a tab or a pane", view)
 		}
@@ -42,7 +42,7 @@ func TestScriptElementsExist(t *testing.T) {
 			t.Errorf("view %q is not registered in app.js", view)
 		}
 	}
-	for _, path := range []string{"/api/v1/drain", "/api/v1/consolidate", "/api/v1/simulate"} {
+	for _, path := range []string{"/api/v1/drain", "/api/v1/consolidate", "/api/v1/disruption", "/api/v1/rightsize", "/api/v1/resilience", "/api/v1/simulate"} {
 		if !strings.Contains(js, "'"+path+"'") {
 			t.Errorf("app.js never calls %s", path)
 		}
@@ -60,14 +60,14 @@ func TestScriptElementsExist(t *testing.T) {
 func TestHTMLInterpolationsAreEscaped(t *testing.T) {
 	js := asset(t, "/app.js")
 	safe := []*regexp.Regexp{
-		regexp.MustCompile(`^(esc|escapeHTML)\(`),                       // escaped text
-		regexp.MustCompile(`^(num|pct|bytes|humanBytes|signed)\(`),      // numbers only
-		regexp.MustCompile(`^(costHTML|metrics|riskHTML)\(`),            // helpers that escape internally
-		regexp.MustCompile(`^(rows|moves)$`),                            // joined from escaped cells above
-		regexp.MustCompile(`^[\w.]+(\.map\(.*\.join\(''\))$`),           // list built with esc()/helpers
-		regexp.MustCompile(`^[\w.]+ \? '[A-Za-z -]*' : '[A-Za-z -]*'$`), // choice between literal class names
-		regexp.MustCompile(`^verdictColor\(`),                           // returns a fixed colour literal
-		regexp.MustCompile(`^(sign|rolling)$`),                          // '+'/'' and a count computed locally
+		regexp.MustCompile(`^(esc|escapeHTML)\(`),                                                           // escaped text
+		regexp.MustCompile(`^(num|pct|bytes|humanBytes|signed|joinEsc|fmtUnit)\(`),                          // numbers only
+		regexp.MustCompile(`^(costHTML|metrics|riskHTML)\(`),                                                // helpers that escape internally
+		regexp.MustCompile(`^(rows|moves|div|scRows|notes|factors|blockers|unknowns|cards|model|missing)$`), // joined from escaped cells above
+		regexp.MustCompile(`^[\w.]+(\.map\(.*\.join\(''\))$`),                                               // list built with esc()/helpers
+		regexp.MustCompile(`^[\w.]+ \? '[A-Za-z -]*' : '[A-Za-z -]*'$`),                                     // choice between literal class names
+		regexp.MustCompile(`^verdictColor\(`),                                                               // returns a fixed colour literal
+		regexp.MustCompile(`^(sign|rolling)$`),                                                              // '+'/'' and a count computed locally
 	}
 	lines := strings.Split(js, "\n")
 	checked := 0

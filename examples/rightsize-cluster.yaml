@@ -1,0 +1,106 @@
+# Over-requested cluster for `kairo rightsize -cluster examples/rightsize-cluster.yaml -usage examples/usage.json`.
+# shop/batch has no usage samples, so its requests stay unchanged and are reported as missing data.
+apiVersion: v1
+kind: Node
+metadata: {name: node-1}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Node
+metadata: {name: node-2}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Node
+metadata: {name: node-3}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Node
+metadata: {name: node-4}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-1
+  namespace: shop
+  labels: {app: api}
+  ownerReferences: [{kind: ReplicaSet, name: api-6f9}]
+spec:
+  nodeName: node-1
+  containers:
+    - name: api
+      resources:
+        requests: {cpu: "1500m", memory: 3Gi}
+    - name: sidecar
+      resources:
+        requests: {cpu: 250m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-2
+  namespace: shop
+  labels: {app: api}
+  ownerReferences: [{kind: ReplicaSet, name: api-6f9}]
+spec:
+  nodeName: node-2
+  containers:
+    - name: api
+      resources:
+        requests: {cpu: "1500m", memory: 3Gi}
+    - name: sidecar
+      resources:
+        requests: {cpu: 250m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-3
+  namespace: shop
+  labels: {app: api}
+  ownerReferences: [{kind: ReplicaSet, name: api-6f9}]
+spec:
+  nodeName: node-3
+  containers:
+    - name: api
+      resources:
+        requests: {cpu: "1500m", memory: 3Gi}
+    - name: sidecar
+      resources:
+        requests: {cpu: 250m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-4
+  namespace: shop
+  labels: {app: api}
+  ownerReferences: [{kind: ReplicaSet, name: api-6f9}]
+spec:
+  nodeName: node-4
+  containers:
+    - name: api
+      resources:
+        requests: {cpu: "1500m", memory: 3Gi}
+    - name: sidecar
+      resources:
+        requests: {cpu: 250m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: batch-1
+  namespace: shop
+  ownerReferences: [{kind: ReplicaSet, name: batch-77c}]
+spec:
+  nodeName: node-4
+  containers:
+    - name: batch
+      resources:
+        requests: {cpu: 500m, memory: 1Gi}

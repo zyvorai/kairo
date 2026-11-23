@@ -1,0 +1,123 @@
+# Mixed spot/on-demand cluster for `kairo resilience -cluster examples/spot-cluster.yaml`.
+# cache has both replicas in one spot pool; batch has no controller.
+apiVersion: v1
+kind: Node
+metadata:
+  name: spot-a1
+  labels: {karpenter.sh/capacity-type: spot, node.kubernetes.io/instance-type: m5.xlarge, topology.kubernetes.io/zone: us-east-1a}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Node
+metadata:
+  name: spot-a2
+  labels: {karpenter.sh/capacity-type: spot, node.kubernetes.io/instance-type: m5.xlarge, topology.kubernetes.io/zone: us-east-1a}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Node
+metadata:
+  name: spot-b1
+  labels: {karpenter.sh/capacity-type: spot, node.kubernetes.io/instance-type: m5.xlarge, topology.kubernetes.io/zone: us-east-1b}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Node
+metadata:
+  name: od-a1
+  labels: {karpenter.sh/capacity-type: on-demand, node.kubernetes.io/instance-type: m5.2xlarge, topology.kubernetes.io/zone: us-east-1a}
+status:
+  allocatable: {cpu: "8", memory: 32Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cache-1
+  labels: {app: cache-7b}
+  ownerReferences: [{kind: ReplicaSet, name: cache-7b}]
+spec:
+  nodeName: spot-a1
+  containers:
+    - name: c
+      resources:
+        requests: {cpu: "2", memory: 4Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cache-2
+  labels: {app: cache-7b}
+  ownerReferences: [{kind: ReplicaSet, name: cache-7b}]
+spec:
+  nodeName: spot-a2
+  containers:
+    - name: c
+      resources:
+        requests: {cpu: "2", memory: 4Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-1
+  labels: {app: web-5d}
+  ownerReferences: [{kind: ReplicaSet, name: web-5d}]
+spec:
+  nodeName: spot-a1
+  containers:
+    - name: c
+      resources:
+        requests: {cpu: "1", memory: 2Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-2
+  labels: {app: web-5d}
+  ownerReferences: [{kind: ReplicaSet, name: web-5d}]
+spec:
+  nodeName: spot-b1
+  containers:
+    - name: c
+      resources:
+        requests: {cpu: "1", memory: 2Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-3
+  labels: {app: web-5d}
+  ownerReferences: [{kind: ReplicaSet, name: web-5d}]
+spec:
+  nodeName: od-a1
+  containers:
+    - name: c
+      resources:
+        requests: {cpu: "1", memory: 2Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-1
+  labels: {app: api-9c}
+  ownerReferences: [{kind: ReplicaSet, name: api-9c}]
+spec:
+  nodeName: od-a1
+  containers:
+    - name: c
+      resources:
+        requests: {cpu: "4", memory: 8Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: batch-debug
+  labels: {app: batch-debug}
+spec:
+  nodeName: spot-b1
+  containers:
+    - name: c
+      resources:
+        requests: {cpu: "3", memory: 8Gi}

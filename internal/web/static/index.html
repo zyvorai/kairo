@@ -180,6 +180,9 @@ SPDX-License-Identifier: LicenseRef-Zyvor-Production-2.0
           <div class="explore-tabs" role="tablist" aria-label="Simulation views">
             <button class="tab active" role="tab" aria-selected="true" data-explore="drain">Node drain</button>
             <button class="tab" role="tab" aria-selected="false" data-explore="consolidate">Consolidation</button>
+            <button class="tab" role="tab" aria-selected="false" data-explore="disruption">Disruption risk</button>
+            <button class="tab" role="tab" aria-selected="false" data-explore="rightsize">Right-sizing</button>
+            <button class="tab" role="tab" aria-selected="false" data-explore="resilience">Pool loss</button>
             <button class="tab" role="tab" aria-selected="false" data-explore="rollout">Rollout surge</button>
             <button class="tab" role="tab" aria-selected="false" data-explore="api">API removal</button>
             <button class="tab" role="tab" aria-selected="false" data-explore="explain">Change list</button>
@@ -193,6 +196,18 @@ SPDX-License-Identifier: LicenseRef-Zyvor-Production-2.0
           </div>
           <div class="explore-pane hidden" data-pane="consolidate">
             <p class="explore-help">Which nodes could be emptied by repacking the existing pods onto fewer nodes, using the drain placement rules. Optional prices (set under the editors above) add a monthly estimate.</p>
+          </div>
+          <div class="explore-pane hidden" data-pane="disruption">
+            <p class="explore-help">How disruptive removing each node would be: PodDisruptionBudgets, single-replica workloads, local state, placement constraints and declared probe startup time, each with its points and inputs. Missing inputs are listed, never defaulted.</p>
+          </div>
+          <div class="explore-pane hidden" data-pane="rightsize">
+            <p class="explore-help">Paste usage samples you exported from your metrics system. Kairo sizes requests at a percentile plus an explicit margin and shows nodes and cost under today’s, optimistic, expected and conservative requests. Advisory only; nothing is changed.</p>
+            <label class="field">Usage samples (JSON)<textarea id="usage-input" spellcheck="false" rows="6" placeholder='{"series":[{"namespace":"default","workload":"web","container":"web","cpuCores":[0.12,0.2,...],"memoryBytes":[268435456,...]}]}'></textarea></label>
+            <label class="field">CPU margin<input id="rs-cpu-margin" type="text" inputmode="decimal" value="0.15"/></label>
+            <label class="field">Memory margin<input id="rs-mem-margin" type="text" inputmode="decimal" value="0.20"/></label>
+          </div>
+          <div class="explore-pane hidden" data-pane="resilience">
+            <p class="explore-help">Group nodes by capacity type, instance type and zone labels, then lose each spot pool and each zone at once. PodDisruptionBudgets do not apply to a cloud reclaim. Nodes without labels are listed as unknown, never guessed.</p>
           </div>
           <div class="explore-pane hidden" data-pane="rollout">
             <p class="explore-help">Rolling updates surge extra pods. A change that fits at steady state can still stall or run degraded when the surge does not fit. Uses the proposed change above.</p>

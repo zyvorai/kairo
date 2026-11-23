@@ -92,6 +92,12 @@ func Consolidate(req ConsolidateRequest) (ConsolidateResult, error) {
 	if err != nil {
 		return ConsolidateResult{}, fmt.Errorf("parse cluster snapshot: %w", err)
 	}
+	return consolidateObjs(objs, req.Prices)
+}
+
+// consolidateObjs is Consolidate on already-parsed objects. It does not
+// modify objs, so callers can run what-if variants of the same snapshot.
+func consolidateObjs(objs []map[string]any, prices *Prices) (ConsolidateResult, error) {
 	nodes := buildNodes(objs)
 	if len(nodes) == 0 {
 		return ConsolidateResult{}, fmt.Errorf("the cluster snapshot has no Node objects")
@@ -115,6 +121,11 @@ func Consolidate(req ConsolidateRequest) (ConsolidateResult, error) {
 
 	// Classify pods per node.
 	hardBlock := map[string]string{} // node -> reason it can never be emptied
+	for _, o := range objs {
+		if str(o["kind"]) == "Node" && str(get(o, "metadata", "annotations", "karpenter.sh/do-not-disrupt")) == "true" {
+			hardBlock[str(get(o, "metadata", "name"))] = "node is annotated karpenter.sh/do-not-disrupt=true"
+		}
+	}
 	movable := map[*nodeState][]*movablePod{}
 	var all []*movablePod
 	for _, p := range pods {
@@ -300,8 +311,8 @@ func Consolidate(req ConsolidateRequest) (ConsolidateResult, error) {
 		CPUBefore: ratio(usedCPUAll, capCPUAll), CPUAfter: ratio(usedCPUKept, capCPUKept),
 		MemoryBefore: ratio(float64(usedMemAll), float64(capMemAll)), MemoryAfter: ratio(float64(usedMemKept), float64(capMemKept)),
 	}
-	if req.Prices.active() {
-		res.Cost = newCost(req.Prices, -float64(len(removed)), -float64(res.MemoryReclaimBytes)/(1<<30),
+	if prices.active() {
+		res.Cost = newCost(prices, -float64(len(removed)), -float64(res.MemoryReclaimBytes)/(1<<30),
 			fmt.Sprintf("%d removable node(s) and %s of reclaimed memory capacity", len(removed), humanBytes(res.MemoryReclaimBytes)))
 	}
 	switch len(removed) {

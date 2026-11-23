@@ -171,3 +171,11 @@ func TestConsolidateDeterministicAndCost(t *testing.T) {
 		t.Error(ConsolidateText(a))
 	}
 }
+
+func TestConsolidateRespectsNodeDoNotDisrupt(t *testing.T) {
+	pinned := strings.Replace(nodeYAML("a", "4", "16Gi"), "metadata: {name: a}", "metadata: {name: a, annotations: {karpenter.sh/do-not-disrupt: \"true\"}}", 1)
+	r := consolidate(t, pinned+nodeYAML("b", "4", "16Gi")+cpod("p1", "a", "x", "1", "1Gi", "")+cpod("p2", "b", "y", "1", "1Gi", ""))
+	if len(r.Removable) != 1 || r.Removable[0] != "b" || !strings.Contains(nodeNamed(r, "a").Reason, "do-not-disrupt") {
+		t.Errorf("annotated node must stay: %+v", r)
+	}
+}

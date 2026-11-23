@@ -33,6 +33,12 @@ func main() {
 		drain(os.Args[2:])
 	case "consolidate":
 		consolidate(os.Args[2:])
+	case "disruption":
+		disruption(os.Args[2:])
+	case "resilience":
+		resilience(os.Args[2:])
+	case "rightsize":
+		rightsize(os.Args[2:])
 	case "version":
 		fmt.Println("kairo", version)
 	default:
@@ -41,7 +47,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "Kairo — know the blast radius before you deploy\n\nUsage:\n  kairo serve [-addr :8080]\n  kairo plan -cluster snapshot.yaml -f desired.yaml [-format text|json|markdown] [-fail-on BLOCK|REVIEW|never] [-explain] [-target-version 1.29] [-node-hour-price P] [-gib-hour-price P] [-currency USD]\n  kairo drain -cluster snapshot.yaml -node n1[,n2] [-format text|json] [-fail-on BLOCK|REVIEW|never]\n  kairo consolidate -cluster snapshot.yaml [-format text|json] [-node-hour-price P] [-gib-hour-price P] [-currency USD]\n  kairo version")
+	fmt.Fprintln(os.Stderr, "Kairo — know the blast radius before you deploy\n\nUsage:\n  kairo serve [-addr :8080]\n  kairo plan -cluster snapshot.yaml -f desired.yaml [-format text|json|markdown] [-fail-on BLOCK|REVIEW|never] [-explain] [-target-version 1.29] [-node-hour-price P] [-gib-hour-price P] [-currency USD]\n  kairo drain -cluster snapshot.yaml -node n1[,n2] [-format text|json] [-fail-on BLOCK|REVIEW|never]\n  kairo consolidate -cluster snapshot.yaml [-format text|json] [-node-hour-price P] [-gib-hour-price P] [-currency USD]\n  kairo disruption -cluster snapshot.yaml [-format text|json]\n  kairo resilience -cluster snapshot.yaml [-format text|json]\n  kairo rightsize -cluster snapshot.yaml -usage usage.json [-format text|json] [-cpu-percentile 0.95] [-memory-percentile 0.99] [-cpu-margin 0.15] [-memory-margin 0.20] [-min-samples 30] [-confidence 0.90] [-node-hour-price P] [-gib-hour-price P] [-currency USD]\n  kairo version")
 }
 func serve(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
@@ -180,6 +186,108 @@ func consolidate(args []string) {
 		fmt.Println(string(b))
 	} else {
 		fmt.Print(sim.ConsolidateText(r))
+	}
+}
+
+func disruption(args []string) {
+	fs := flag.NewFlagSet("disruption", flag.ExitOnError)
+	clusterPath := fs.String("cluster", "", "cluster snapshot YAML/JSON")
+	format := fs.String("format", "text", "output format: text or json")
+	_ = fs.Parse(args)
+	if *format != "text" && *format != "json" {
+		fmt.Fprintln(os.Stderr, "error: -format must be text or json")
+		os.Exit(2)
+	}
+	if *clusterPath == "" {
+		fs.Usage()
+		os.Exit(2)
+	}
+	cluster, err := os.ReadFile(*clusterPath)
+	if err != nil {
+		fatal(err)
+	}
+	r, err := sim.DisruptionRisk(sim.DisruptionRequest{ClusterYAML: string(cluster)})
+	if err != nil {
+		fatal(err)
+	}
+	if *format == "json" {
+		b, _ := json.MarshalIndent(r, "", "  ")
+		fmt.Println(string(b))
+	} else {
+		fmt.Print(sim.DisruptionText(r))
+	}
+}
+func resilience(args []string) {
+	fs := flag.NewFlagSet("resilience", flag.ExitOnError)
+	clusterPath := fs.String("cluster", "", "cluster snapshot YAML/JSON")
+	format := fs.String("format", "text", "output format: text or json")
+	_ = fs.Parse(args)
+	if *format != "text" && *format != "json" {
+		fmt.Fprintln(os.Stderr, "error: -format must be text or json")
+		os.Exit(2)
+	}
+	if *clusterPath == "" {
+		fs.Usage()
+		os.Exit(2)
+	}
+	cluster, err := os.ReadFile(*clusterPath)
+	if err != nil {
+		fatal(err)
+	}
+	r, err := sim.Resilience(sim.ResilienceRequest{ClusterYAML: string(cluster)})
+	if err != nil {
+		fatal(err)
+	}
+	if *format == "json" {
+		b, _ := json.MarshalIndent(r, "", "  ")
+		fmt.Println(string(b))
+	} else {
+		fmt.Print(sim.ResilienceText(r))
+	}
+}
+func rightsize(args []string) {
+	fs := flag.NewFlagSet("rightsize", flag.ExitOnError)
+	clusterPath := fs.String("cluster", "", "cluster snapshot YAML/JSON")
+	usagePath := fs.String("usage", "", "usage samples JSON: {\"series\":[{\"namespace\",\"workload\",\"container\",\"cpuCores\":[],\"memoryBytes\":[]}]}")
+	format := fs.String("format", "text", "output format: text or json")
+	cpuP := fs.Float64("cpu-percentile", 0.95, "CPU percentile of the samples to size on, in (0,1]")
+	memP := fs.Float64("memory-percentile", 0.99, "memory percentile of the samples to size on, in (0,1]; 1 means the observed peak")
+	cpuM := fs.Float64("cpu-margin", 0.15, "safety margin added to the CPU percentile (0.15 = +15%)")
+	memM := fs.Float64("memory-margin", 0.20, "safety margin added to the memory percentile")
+	minS := fs.Int("min-samples", 30, "minimum samples per resource before a recommendation is made")
+	conf := fs.Float64("confidence", 0.90, "confidence of the percentile interval that sets the optimistic/conservative scenarios")
+	prices := priceFlags(fs)
+	_ = fs.Parse(args)
+	if *format != "text" && *format != "json" {
+		fmt.Fprintln(os.Stderr, "error: -format must be text or json")
+		os.Exit(2)
+	}
+	if *clusterPath == "" || *usagePath == "" {
+		fs.Usage()
+		os.Exit(2)
+	}
+	cluster, err := os.ReadFile(*clusterPath)
+	if err != nil {
+		fatal(err)
+	}
+	raw, err := os.ReadFile(*usagePath)
+	if err != nil {
+		fatal(err)
+	}
+	var usage sim.UsageData
+	if err := json.Unmarshal(raw, &usage); err != nil {
+		fatal(fmt.Errorf("parse usage file: %w", err))
+	}
+	opts := &sim.RightsizeOptions{CPUPercentile: cpuP, MemoryPercentile: memP, CPUMargin: cpuM, MemoryMargin: memM, MinSamples: *minS, Confidence: conf}
+	r, err := sim.Rightsize(sim.RightsizeRequest{ClusterYAML: string(cluster), Usage: usage, Options: opts, Prices: prices()})
+	if err != nil {
+		fatal(err)
+	}
+	if *format == "json" {
+		b, _ := json.MarshalIndent(r, "", "  ")
+		fmt.Println(string(b))
+	} else {
+		fmt.Print(sim.RightsizeText(r))
 	}
 }
 

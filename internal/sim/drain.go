@@ -49,7 +49,12 @@ func Drain(req DrainRequest) (DrainResult, error) {
 	if err != nil {
 		return DrainResult{}, fmt.Errorf("parse cluster snapshot: %w", err)
 	}
-	if len(req.Nodes) == 0 {
+	return drainObjs(objs, req.Nodes)
+}
+
+// drainObjs is Drain on already-parsed objects. It does not modify objs.
+func drainObjs(objs []map[string]any, nodeNames []string) (DrainResult, error) {
+	if len(nodeNames) == 0 {
 		return DrainResult{}, fmt.Errorf("at least one node is required")
 	}
 	all := buildNodes(objs)
@@ -59,7 +64,7 @@ func Drain(req DrainRequest) (DrainResult, error) {
 	}
 	target := map[string]bool{}
 	var names []string
-	for _, n := range req.Nodes {
+	for _, n := range nodeNames {
 		n = strings.TrimSpace(n)
 		if n == "" || target[n] {
 			continue

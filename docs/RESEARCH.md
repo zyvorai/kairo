@@ -40,6 +40,10 @@ Rejected or deferred:
 - **Quota and LimitRange admission (built).** Fills the gap the earlier `QUOTA_PRESSURE` check left (it ignored namespaces). Still rejected: a general policy-as-code engine; these are two fixed, well-specified admission plugins.
 - **Rollout timeline** stays rejected, as before.
 
+## Follow-up: disruption risk, right-sizing and resilience
+
+A second pass over the cost-optimisation field (Karpenter budgets, Cluster Autoscaler, descheduler, in-place resize, DRA, spot diversification) is in [RESEARCH-disruption-rightsizing.md](RESEARCH-disruption-rightsizing.md). It built `kairo rightsize`, `kairo disruption` and `kairo resilience`; the earlier "per-pod request right-sizing (needs observed usage)" rejection is now met by user-supplied usage samples.
+
 ## Sources
 
 - Pluto: https://github.com/FairwindsOps/pluto and https://www.cncf.io/blog/2021/10/26/welcome-to-pluto-the-place-to-start-with-open-source-development/

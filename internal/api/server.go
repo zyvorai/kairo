@@ -63,6 +63,9 @@ func (s Server) routes() []route {
 		{Route{"POST", "/api/v1/simulate"}, s.simulate},
 		{Route{"POST", "/api/v1/drain"}, s.drain},
 		{Route{"POST", "/api/v1/consolidate"}, s.consolidate},
+		{Route{"POST", "/api/v1/disruption"}, s.disruption},
+		{Route{"POST", "/api/v1/rightsize"}, s.rightsize},
+		{Route{"POST", "/api/v1/resilience"}, s.resilience},
 	}
 }
 
@@ -148,6 +151,57 @@ func (s Server) consolidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := sim.Consolidate(req)
+	if err != nil {
+		writeJSON(w, 422, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, out)
+}
+
+func (s Server) disruption(w http.ResponseWriter, r *http.Request) {
+	var req sim.DisruptionRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.ClusterYAML) == "" {
+		writeJSON(w, 400, map[string]string{"error": "clusterYaml is required"})
+		return
+	}
+	out, err := sim.DisruptionRisk(req)
+	if err != nil {
+		writeJSON(w, 422, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, out)
+}
+
+func (s Server) rightsize(w http.ResponseWriter, r *http.Request) {
+	var req sim.RightsizeRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.ClusterYAML) == "" || len(req.Usage.Series) == 0 {
+		writeJSON(w, 400, map[string]string{"error": "clusterYaml and usage.series are required"})
+		return
+	}
+	out, err := sim.Rightsize(req)
+	if err != nil {
+		writeJSON(w, 422, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, out)
+}
+
+func (s Server) resilience(w http.ResponseWriter, r *http.Request) {
+	var req sim.ResilienceRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.ClusterYAML) == "" {
+		writeJSON(w, 400, map[string]string{"error": "clusterYaml is required"})
+		return
+	}
+	out, err := sim.Resilience(req)
 	if err != nil {
 		writeJSON(w, 422, map[string]string{"error": err.Error()})
 		return
