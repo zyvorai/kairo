@@ -31,7 +31,14 @@ Rejected or deferred:
 - **Rollout risk timeline (step-by-step surge/unavailable schedule):** needs a controller model of ReplicaSet scaling and readiness timing; the peak check captures most of the value at a fraction of the complexity.
 - **Image/chart freshness (Nova):** requires network access and is not deterministic.
 - **More lint rules (kube-score/Polaris):** commodity, not differentiating.
-- **Karpenter-style consolidation (which nodes could be removed to save cost):** a natural follow-up using the drain engine; deferred.
+- **Karpenter-style consolidation (which nodes could be removed to save cost):** deferred at first; now built as `kairo consolidate` on the drain engine (see Follow-up below).
+
+## Follow-up: consolidation, cost and admission
+
+- **Consolidation (built).** The deferred idea from above. It reuses drain's placement and PDB logic and adds a greedy emptiest-first, best-fit-decreasing packer. Rejected for now: optimal bin packing (NP-hard, unneeded for a preflight; the plan is labelled a heuristic), affinity/topology spread/PV topology (listed as not modelled in every result), and per-pod request right-sizing (needs observed usage, which a snapshot does not carry).
+- **Cost awareness (built, narrowly).** Only user-supplied node-hour and GiB-hour prices, a fixed 730-hour month and an explicit estimate label. Rejected: pulling cloud price lists (network, non-deterministic, stale) and reserved/spot discount models.
+- **Quota and LimitRange admission (built).** Fills the gap the earlier `QUOTA_PRESSURE` check left (it ignored namespaces). Still rejected: a general policy-as-code engine; these are two fixed, well-specified admission plugins.
+- **Rollout timeline** stays rejected, as before.
 
 ## Sources
 
