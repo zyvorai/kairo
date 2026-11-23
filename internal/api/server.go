@@ -50,6 +50,7 @@ func (s Server) Handler() http.Handler {
 		writeJSON(w, 200, map[string]string{"clusterYaml": s.ExampleCluster, "desiredYaml": s.ExampleDesired})
 	})
 	m.HandleFunc("POST /api/v1/simulate", s.simulate)
+	m.HandleFunc("POST /api/v1/drain", s.drain)
 	m.Handle("/", s.Web)
 	return logging(s.Log, m)
 }
@@ -74,6 +75,33 @@ func (s Server) simulate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := sim.Simulate(req)
+	if err != nil {
+		writeJSON(w, 422, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, out)
+}
+func (s Server) drain(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
+	if err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeJSON(w, 413, map[string]string{"error": "request too large"})
+		} else {
+			writeJSON(w, 400, map[string]string{"error": "could not read request body"})
+		}
+		return
+	}
+	var req sim.DrainRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if strings.TrimSpace(req.ClusterYAML) == "" || len(req.Nodes) == 0 {
+		writeJSON(w, 400, map[string]string{"error": "clusterYaml and nodes are required"})
+		return
+	}
+	out, err := sim.Drain(req)
 	if err != nil {
 		writeJSON(w, 422, map[string]string{"error": err.Error()})
 		return

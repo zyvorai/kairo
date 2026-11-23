@@ -6,6 +6,9 @@ package sim
 type Request struct {
 	ClusterYAML string `json:"clusterYaml"`
 	DesiredYAML string `json:"desiredYaml"`
+	// TargetVersion is the Kubernetes minor version ("1.29" or "v1.29.3") the
+	// manifests must be valid on. Empty means the newest version Kairo knows.
+	TargetVersion string `json:"targetVersion,omitempty"`
 }
 
 type ResourceRef struct {
@@ -50,6 +53,11 @@ type Result struct {
 	ExposureChanges      int          `json:"exposureChanges"`
 	RBACRisks            int          `json:"rbacRisks"`
 	HPARisks             int          `json:"hpaRisks"`
+	RolloutRisks         int          `json:"rolloutRisks"`
+	RolloutStalls        int          `json:"rolloutStalls"`
+	APIRemoved           int          `json:"apiRemoved"`
+	APIDeprecated        int          `json:"apiDeprecated"`
+	TargetVersion        string       `json:"targetVersion"`
 	CPUDeltaCores        float64      `json:"cpuDeltaCores"`
 	MemoryDeltaBytes     int64        `json:"memoryDeltaBytes"`
 	GPUDelta             int64        `json:"gpuDelta"`

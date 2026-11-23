@@ -30,3 +30,59 @@ assert keys==sorted(keys), keys
 assert r['changes'], r
 print('e2e ok:', r['clusterName'], r['verdict'], r['blastRadius'])
 PY
+
+# --- CLI: drain simulation, rollout surge, target-version ---
+set +e
+./bin/kairo drain -cluster examples/drain-cluster.yaml -node worker-a >"${TMPDIR:-/tmp}/kairo-drain.out"
+rc=$?
+set -e
+[ "$rc" -eq 3 ] || { echo "drain: expected exit 3 (PDB blocked), got $rc"; exit 1; }
+grep -q DRAIN_PDB_BLOCKED "${TMPDIR:-/tmp}/kairo-drain.out"
+./bin/kairo drain -cluster examples/drain-cluster.yaml -node worker-a -fail-on never -format json | grep -q '"pdbBlocked": 1'
+./bin/kairo drain -cluster examples/drain-cluster.yaml -node nope >/dev/null 2>&1 && { echo "drain: unknown node should fail"; exit 1; }
+
+E2E_DIR="$(mktemp -d)"
+cat >"$E2E_DIR/cluster.yaml" <<'YAML'
+apiVersion: v1
+kind: Node
+metadata: {name: n1}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web}
+spec:
+  replicas: 4
+  template:
+    spec:
+      containers:
+        - name: c
+          image: web:1
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+YAML
+cat >"$E2E_DIR/desired.yaml" <<'YAML'
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web}
+spec:
+  replicas: 4
+  template:
+    spec:
+      containers:
+        - name: c
+          image: web:2
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+YAML
+./bin/kairo plan -cluster "$E2E_DIR/cluster.yaml" -f "$E2E_DIR/desired.yaml" -json -fail-on never | grep -q ROLLOUT_SURGE_UNSCHEDULABLE
+printf 'apiVersion: batch/v1beta1\nkind: CronJob\nmetadata: {name: j}\n' >"$E2E_DIR/old.yaml"
+set +e
+./bin/kairo plan -cluster "$E2E_DIR/cluster.yaml" -f "$E2E_DIR/old.yaml" -target-version 1.25 >/dev/null
+[ $? -eq 3 ] || { echo "target 1.25 should BLOCK"; exit 1; }
+./bin/kairo plan -cluster "$E2E_DIR/cluster.yaml" -f "$E2E_DIR/old.yaml" -target-version 1.24 >/dev/null
+[ $? -eq 0 ] || { echo "target 1.24 should pass"; exit 1; }
+set -e
+rm -rf "$E2E_DIR"
+echo "e2e cli ok"

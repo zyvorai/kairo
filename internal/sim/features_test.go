@@ -27,7 +27,7 @@ func hpa(target string, minR, maxR int) string {
 
 func run(t *testing.T, cluster, desired string) Result {
 	t.Helper()
-	r, err := Simulate(Request{cluster, desired})
+	r, err := Simulate(Request{ClusterYAML: cluster, DesiredYAML: desired})
 	if err != nil {
 		t.Fatal(err)
 	}

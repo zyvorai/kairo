@@ -46,3 +46,32 @@ func mdEscape(s string) string {
 	s = strings.NewReplacer("|", `\|`, "\n", " ", "\r", " ", "<", "&lt;", ">", "&gt;", "`", "'").Replace(s)
 	return s
 }
+
+// DrainText renders a drain simulation for the terminal.
+func DrainText(r DrainResult) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "KAIRO drain · %s\nVerdict: %s   Evicted: %d · Ignored: %d · Unmanaged: %d · Unschedulable: %d · PDB-blocked: %d\n",
+		strings.Join(r.Nodes, ","), r.Verdict, r.Evicted, r.Ignored, r.Unmanaged, r.Unschedulable, r.PDBBlocked)
+	if len(r.Pods) > 0 {
+		b.WriteString("\nPods:\n")
+		for _, p := range r.Pods {
+			note := ""
+			switch {
+			case p.BlockedBy != "":
+				note = " BLOCKED by PDB " + p.BlockedBy
+			case p.Action == "evict" && p.Reschedulable:
+				note = " -> reschedulable"
+			case p.Action == "evict":
+				note = " -> NO NODE FITS"
+			}
+			fmt.Fprintf(&b, "  %s/%s on %s: %s%s\n", p.Namespace, p.Name, p.Node, p.Action, note)
+		}
+	}
+	if len(r.Risks) > 0 {
+		b.WriteString("\nFindings:\n")
+		for _, x := range r.Risks {
+			fmt.Fprintf(&b, "  [%s] %s %s/%s: %s\n", x.Severity, x.Code, x.Resource.Kind, x.Resource.Name, x.Detail)
+		}
+	}
+	return b.String()
+}

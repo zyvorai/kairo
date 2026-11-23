@@ -47,7 +47,7 @@ spec:
     requests:
       storage: 50Gi
 `
-	r, err := Simulate(Request{cluster, desired})
+	r, err := Simulate(Request{ClusterYAML: cluster, DesiredYAML: desired})
 	if err != nil {
 		t.Fatal(err)
 	}

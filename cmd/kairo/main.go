@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -28,6 +29,8 @@ func main() {
 		serve(os.Args[2:])
 	case "plan":
 		plan(os.Args[2:])
+	case "drain":
+		drain(os.Args[2:])
 	case "version":
 		fmt.Println("kairo", version)
 	default:
@@ -36,7 +39,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "Kairo — know the blast radius before you deploy\n\nUsage:\n  kairo serve [-addr :8080]\n  kairo plan -cluster snapshot.yaml -f desired.yaml [-format text|json|markdown] [-fail-on BLOCK|REVIEW|never] [-explain]\n  kairo version")
+	fmt.Fprintln(os.Stderr, "Kairo — know the blast radius before you deploy\n\nUsage:\n  kairo serve [-addr :8080]\n  kairo plan -cluster snapshot.yaml -f desired.yaml [-format text|json|markdown] [-fail-on BLOCK|REVIEW|never] [-explain] [-target-version 1.29]\n  kairo drain -cluster snapshot.yaml -node n1[,n2] [-format text|json] [-fail-on BLOCK|REVIEW|never]\n  kairo version")
 }
 func serve(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
@@ -60,6 +63,7 @@ func plan(args []string) {
 	format := fs.String("format", "text", "output format: text, json or markdown")
 	failOn := fs.String("fail-on", "BLOCK", "exit 3 when the verdict is at least this: BLOCK, REVIEW or never")
 	explain := fs.Bool("explain", false, "show what changed per object (replicas, image, resources); adds changes[] to JSON")
+	target := fs.String("target-version", "", "Kubernetes version manifests must be valid on, e.g. 1.29 (default: newest known)")
 	_ = fs.Parse(args)
 	if *asJSON {
 		*format = "json"
@@ -81,7 +85,7 @@ func plan(args []string) {
 	if must != nil {
 		fatal(must)
 	}
-	r, err := sim.Simulate(sim.Request{ClusterYAML: string(cluster), DesiredYAML: string(desired)})
+	r, err := sim.Simulate(sim.Request{ClusterYAML: string(cluster), DesiredYAML: string(desired), TargetVersion: *target})
 	if err != nil {
 		fatal(err)
 	}
@@ -104,6 +108,40 @@ func plan(args []string) {
 		for _, x := range r.Recommendations {
 			fmt.Println("-", x)
 		}
+	}
+	if sim.Rank(r.Verdict) >= threshold {
+		os.Exit(3)
+	}
+}
+func drain(args []string) {
+	fs := flag.NewFlagSet("drain", flag.ExitOnError)
+	clusterPath := fs.String("cluster", "", "cluster snapshot YAML/JSON")
+	nodes := fs.String("node", "", "node(s) to drain, comma-separated")
+	format := fs.String("format", "text", "output format: text or json")
+	failOn := fs.String("fail-on", "BLOCK", "exit 3 when the verdict is at least this: BLOCK, REVIEW or never")
+	_ = fs.Parse(args)
+	threshold, ok := map[string]int{"BLOCK": 2, "REVIEW": 1, "never": 3}[*failOn]
+	if !ok || (*format != "text" && *format != "json") {
+		fmt.Fprintln(os.Stderr, "error: -format must be text or json; -fail-on must be BLOCK, REVIEW or never")
+		os.Exit(2)
+	}
+	if *clusterPath == "" || *nodes == "" {
+		fs.Usage()
+		os.Exit(2)
+	}
+	cluster, err := os.ReadFile(*clusterPath)
+	if err != nil {
+		fatal(err)
+	}
+	r, err := sim.Drain(sim.DrainRequest{ClusterYAML: string(cluster), Nodes: strings.Split(*nodes, ",")})
+	if err != nil {
+		fatal(err)
+	}
+	if *format == "json" {
+		b, _ := json.MarshalIndent(r, "", "  ")
+		fmt.Println(string(b))
+	} else {
+		fmt.Print(sim.DrainText(r))
 	}
 	if sim.Rank(r.Verdict) >= threshold {
 		os.Exit(3)
