@@ -68,9 +68,9 @@ func newCost(p *Prices, nodeDelta, gibDelta float64, basis string) *CostEstimate
 		cur = "price units"
 	}
 	c := &CostEstimate{Estimate: true, Currency: cur, HoursPerMonth: HoursPerMonth, NodeHourPrice: p.NodeHour, GiBHourPrice: p.GiBHour, Basis: basis, Note: costNote}
-	c.NodeMonthlyDelta = round2(nodeDelta * p.NodeHour * HoursPerMonth)
-	c.MemoryMonthlyDelta = round2(gibDelta * p.GiBHour * HoursPerMonth)
-	c.MonthlyDelta = round2(c.NodeMonthlyDelta + c.MemoryMonthlyDelta)
+	c.NodeMonthlyDelta = round2(nodeDelta*p.NodeHour*HoursPerMonth) + 0 // + 0 turns -0 into 0
+	c.MemoryMonthlyDelta = round2(gibDelta*p.GiBHour*HoursPerMonth) + 0
+	c.MonthlyDelta = round2(c.NodeMonthlyDelta+c.MemoryMonthlyDelta) + 0
 	return c
 }
 

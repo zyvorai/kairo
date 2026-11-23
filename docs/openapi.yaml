@@ -1,0 +1,367 @@
+# Copyright 2026 Zyvor AI Labs · https://zyvor.dev
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-2.0
+#
+# OpenAPI description of the Kairo REST API. internal/api/openapi_test.go
+# fails when a registered route is missing here (or documented but not
+# registered) and when a response/request field of the Go types is missing
+# from the matching schema.
+openapi: 3.0.3
+info:
+  title: Kairo API
+  version: "1"
+  description: >
+    Kairo simulates Kubernetes changes against a snapshot of a cluster.
+    Every simulation is deterministic and offline; no cluster or cloud API is
+    contacted. Request bodies are limited to 4 MiB (413 beyond that).
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: healthz
+      responses:
+        "200":
+          description: The service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  service: {type: string}
+                  time: {type: string, format: date-time}
+  /readyz:
+    get:
+      summary: Readiness probe
+      operationId: readyz
+      responses:
+        "200":
+          description: The service is ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready: {type: boolean}
+                  service: {type: string}
+  /api/v1/version:
+    get:
+      summary: Build version
+      operationId: version
+      responses:
+        "200":
+          description: The running version.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service: {type: string}
+                  version: {type: string}
+  /api/v1/examples:
+    get:
+      summary: Demo cluster snapshot and proposed change
+      operationId: examples
+      responses:
+        "200":
+          description: Example manifests (empty strings when the example files are not available).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clusterYaml: {type: string}
+                  desiredYaml: {type: string}
+  /api/v1/simulate:
+    post:
+      summary: Simulate a proposed change (kairo plan)
+      description: >
+        Scheduling fit, rollout surge, HPA headroom, removed/deprecated APIs,
+        ResourceQuota and LimitRange admission, security, exposure and RBAC risks.
+        Changes are listed in `changes`. Supplying `prices` adds a cost estimate.
+      operationId: simulate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimulateRequest"
+      responses:
+        "200":
+          description: The simulation result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Result"
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "422": {$ref: "#/components/responses/Unprocessable"}
+  /api/v1/drain:
+    post:
+      summary: Simulate draining nodes (kairo drain)
+      operationId: drain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DrainRequest"
+      responses:
+        "200":
+          description: The drain result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DrainResult"
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "422": {$ref: "#/components/responses/Unprocessable"}
+  /api/v1/consolidate:
+    post:
+      summary: Simulate consolidating pods onto fewer nodes (kairo consolidate)
+      description: >
+        Greedy best-fit packing of controller-managed pods onto fewer nodes with
+        the same placement rules as drain. The response lists what is not modelled.
+      operationId: consolidate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsolidateRequest"
+      responses:
+        "200":
+          description: The consolidation plan.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsolidateResult"
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "422": {$ref: "#/components/responses/Unprocessable"}
+components:
+  responses:
+    BadRequest:
+      description: Invalid JSON or a required field is missing.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    TooLarge:
+      description: The request body exceeds 4 MiB.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Unprocessable:
+      description: The input parsed but cannot be simulated (bad YAML, unknown node, invalid target version or prices).
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: {type: string}
+    Prices:
+      type: object
+      description: Optional user-supplied unit prices. Kairo never calls a cloud pricing API.
+      properties:
+        currency: {type: string, maxLength: 16, description: "Label only, e.g. USD."}
+        nodeHourPrice: {type: number, minimum: 0, description: Price of one node for one hour.}
+        gibHourPrice: {type: number, minimum: 0, description: Price of one GiB of memory per hour, only if billed separately from nodes.}
+    CostEstimate:
+      type: object
+      description: A monthly cost change derived from user-supplied prices (730-hour month). An estimate, not a quote; negative amounts are savings.
+      properties:
+        estimate: {type: boolean}
+        currency: {type: string}
+        hoursPerMonth: {type: integer}
+        nodeHourPrice: {type: number}
+        gibHourPrice: {type: number}
+        nodeMonthlyDelta: {type: number}
+        memoryMonthlyDelta: {type: number}
+        monthlyDelta: {type: number}
+        basis: {type: string}
+        note: {type: string}
+    SimulateRequest:
+      type: object
+      required: [clusterYaml, desiredYaml]
+      properties:
+        clusterYaml: {type: string, description: Cluster snapshot as YAML or JSON (kubectl get -o yaml).}
+        desiredYaml: {type: string, description: Proposed manifests as YAML or JSON.}
+        targetVersion: {type: string, example: "1.29", description: Kubernetes minor version manifests must be valid on; empty means the newest known.}
+        prices: {$ref: "#/components/schemas/Prices"}
+    ResourceRef:
+      type: object
+      properties:
+        kind: {type: string}
+        namespace: {type: string}
+        name: {type: string}
+    Risk:
+      type: object
+      properties:
+        severity: {type: string, enum: [critical, high, medium, low, info]}
+        code: {type: string}
+        title: {type: string}
+        detail: {type: string}
+        resource: {$ref: "#/components/schemas/ResourceRef"}
+    NodeResult:
+      type: object
+      properties:
+        name: {type: string}
+        cpuCapacity: {type: number}
+        cpuFree: {type: number}
+        memoryCapacityBytes: {type: integer, format: int64}
+        memoryFreeBytes: {type: integer, format: int64}
+        gpuCapacity: {type: integer, format: int64}
+        gpuFree: {type: integer, format: int64}
+    FieldChange:
+      type: object
+      properties:
+        field: {type: string}
+        old: {type: string}
+        new: {type: string}
+    Change:
+      type: object
+      properties:
+        kind: {type: string}
+        namespace: {type: string}
+        name: {type: string}
+        action: {type: string, enum: [created, changed, deleted]}
+        fields:
+          type: array
+          items: {$ref: "#/components/schemas/FieldChange"}
+    Result:
+      type: object
+      properties:
+        clusterName: {type: string}
+        objectsAnalyzed: {type: integer}
+        changedObjects: {type: integer}
+        createdObjects: {type: integer}
+        deletedObjects: {type: integer}
+        podsRestarted: {type: integer}
+        podsCreated: {type: integer}
+        unschedulablePods: {type: integer}
+        servicesAffected: {type: integer}
+        networkPolicyChanges: {type: integer}
+        pvcDestructiveRisks: {type: integer}
+        pdbRisks: {type: integer}
+        quotaRisks: {type: integer}
+        limitRangeRisks: {type: integer}
+        securityRisks: {type: integer}
+        exposureChanges: {type: integer}
+        rbacRisks: {type: integer}
+        hpaRisks: {type: integer}
+        rolloutRisks: {type: integer}
+        rolloutStalls: {type: integer}
+        apiRemoved: {type: integer}
+        apiDeprecated: {type: integer}
+        targetVersion: {type: string}
+        cpuDeltaCores: {type: number}
+        memoryDeltaBytes: {type: integer, format: int64}
+        gpuDelta: {type: integer, format: int64}
+        blastRadius: {type: integer, minimum: 0, maximum: 100}
+        riskLevel: {type: string, enum: [LOW, MEDIUM, HIGH]}
+        verdict: {type: string, enum: [SAFE, REVIEW, BLOCK]}
+        risks:
+          type: array
+          items: {$ref: "#/components/schemas/Risk"}
+        recommendations:
+          type: array
+          items: {type: string}
+        nodes:
+          type: array
+          items: {$ref: "#/components/schemas/NodeResult"}
+        changes:
+          type: array
+          items: {$ref: "#/components/schemas/Change"}
+        cost: {$ref: "#/components/schemas/CostEstimate"}
+    DrainRequest:
+      type: object
+      required: [clusterYaml, nodes]
+      properties:
+        clusterYaml: {type: string}
+        nodes:
+          type: array
+          minItems: 1
+          items: {type: string}
+    DrainPod:
+      type: object
+      properties:
+        namespace: {type: string}
+        name: {type: string}
+        node: {type: string}
+        action: {type: string, enum: [evict, ignore-daemonset, ignore-static, unmanaged]}
+        reschedulable: {type: boolean}
+        blockedBy: {type: string}
+    DrainResult:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items: {type: string}
+        verdict: {type: string, enum: [SAFE, REVIEW, BLOCK]}
+        evicted: {type: integer}
+        ignored: {type: integer}
+        unmanaged: {type: integer}
+        unschedulable: {type: integer}
+        pdbBlocked: {type: integer}
+        pods:
+          type: array
+          items: {$ref: "#/components/schemas/DrainPod"}
+        risks:
+          type: array
+          items: {$ref: "#/components/schemas/Risk"}
+    ConsolidateRequest:
+      type: object
+      required: [clusterYaml]
+      properties:
+        clusterYaml: {type: string}
+        prices: {$ref: "#/components/schemas/Prices"}
+    ConsolidateNode:
+      type: object
+      properties:
+        name: {type: string}
+        removable: {type: boolean}
+        reason: {type: string, description: Why a node must stay; empty for removable nodes.}
+        movablePods: {type: integer}
+        cpuCapacity: {type: number}
+        cpuRequested: {type: number}
+        memoryCapacityBytes: {type: integer, format: int64}
+        memoryRequestedBytes: {type: integer, format: int64}
+    ConsolidateMove:
+      type: object
+      properties:
+        namespace: {type: string}
+        name: {type: string}
+        from: {type: string}
+        to: {type: string}
+    Utilization:
+      type: object
+      description: Requested resources divided by allocatable (0 to 1, above 1 when overcommitted).
+      properties:
+        cpuBefore: {type: number}
+        cpuAfter: {type: number}
+        memoryBefore: {type: number}
+        memoryAfter: {type: number}
+    ConsolidateResult:
+      type: object
+      properties:
+        nodesBefore: {type: integer}
+        nodesAfter: {type: integer}
+        removable:
+          type: array
+          items: {type: string}
+        cpuReclaimCores: {type: number}
+        memoryReclaimBytes: {type: integer, format: int64}
+        gpuReclaim: {type: integer, format: int64}
+        utilization: {$ref: "#/components/schemas/Utilization"}
+        nodes:
+          type: array
+          items: {$ref: "#/components/schemas/ConsolidateNode"}
+        moves:
+          type: array
+          items: {$ref: "#/components/schemas/ConsolidateMove"}
+        cost: {$ref: "#/components/schemas/CostEstimate"}
+        summary: {type: string}
+        notModelled:
+          type: array
+          items: {type: string}
