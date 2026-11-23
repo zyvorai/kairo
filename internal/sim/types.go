@@ -49,6 +49,7 @@ type Result struct {
 	SecurityRisks        int          `json:"securityRisks"`
 	ExposureChanges      int          `json:"exposureChanges"`
 	RBACRisks            int          `json:"rbacRisks"`
+	HPARisks             int          `json:"hpaRisks"`
 	CPUDeltaCores        float64      `json:"cpuDeltaCores"`
 	MemoryDeltaBytes     int64        `json:"memoryDeltaBytes"`
 	GPUDelta             int64        `json:"gpuDelta"`
@@ -58,4 +59,5 @@ type Result struct {
 	Risks                []Risk       `json:"risks"`
 	Recommendations      []string     `json:"recommendations"`
 	Nodes                []NodeResult `json:"nodes"`
+	Changes              []Change     `json:"changes,omitempty"`
 }

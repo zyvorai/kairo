@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -37,7 +36,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "Kairo — know the blast radius before you deploy\n\nUsage:\n  kairo serve [-addr :8080]\n  kairo plan -cluster snapshot.yaml -f desired.yaml [-format text|json|markdown] [-fail-on BLOCK|REVIEW|never]\n  kairo version")
+	fmt.Fprintln(os.Stderr, "Kairo — know the blast radius before you deploy\n\nUsage:\n  kairo serve [-addr :8080]\n  kairo plan -cluster snapshot.yaml -f desired.yaml [-format text|json|markdown] [-fail-on BLOCK|REVIEW|never] [-explain]\n  kairo version")
 }
 func serve(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
@@ -45,8 +44,8 @@ func serve(args []string) {
 	_ = fs.Parse(args)
 	cluster := readOptional("examples/cluster.yaml")
 	desired := readOptional("examples/desired.yaml")
-	srv := api.Server{Log: slog.Default(), Web: webui.Handler(), ExampleCluster: cluster, ExampleDesired: desired}
-	httpSrv := &http.Server{Addr: *addr, Handler: srv.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second}
+	srv := api.Server{Version: version, Log: slog.Default(), Web: webui.Handler(), ExampleCluster: cluster, ExampleDesired: desired}
+	httpSrv := api.NewHTTPServer(*addr, srv.Handler())
 	slog.Info("kairo listening", "addr", *addr)
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server failed", "error", err)
@@ -60,6 +59,7 @@ func plan(args []string) {
 	asJSON := fs.Bool("json", false, "print JSON (same as -format json)")
 	format := fs.String("format", "text", "output format: text, json or markdown")
 	failOn := fs.String("fail-on", "BLOCK", "exit 3 when the verdict is at least this: BLOCK, REVIEW or never")
+	explain := fs.Bool("explain", false, "show what changed per object (replicas, image, resources); adds changes[] to JSON")
 	_ = fs.Parse(args)
 	if *asJSON {
 		*format = "json"
@@ -85,6 +85,9 @@ func plan(args []string) {
 	if err != nil {
 		fatal(err)
 	}
+	if !*explain {
+		r.Changes = nil
+	}
 	switch *format {
 	case "json":
 		b, _ := json.MarshalIndent(r, "", "  ")
@@ -93,6 +96,10 @@ func plan(args []string) {
 		fmt.Print(sim.Markdown(r))
 	default:
 		fmt.Println(sim.SummaryText(r))
+		if *explain {
+			fmt.Println("\nChanges:")
+			fmt.Println(sim.ExplainText(r.Changes))
+		}
 		fmt.Println("\nRecommendations:")
 		for _, x := range r.Recommendations {
 			fmt.Println("-", x)
