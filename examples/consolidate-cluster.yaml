@@ -1,0 +1,65 @@
+# Under-used cluster for `kairo consolidate -cluster examples/consolidate-cluster.yaml`.
+# worker-c carries an unmanaged pod, so it must stay. The web PodDisruptionBudget
+# allows one disruption, so only one of worker-a / worker-b can be emptied.
+apiVersion: v1
+kind: Node
+metadata: {name: worker-a}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Node
+metadata: {name: worker-b}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Node
+metadata: {name: worker-c}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-1
+  labels: {app: web}
+  ownerReferences: [{kind: ReplicaSet, name: web-5d8}]
+spec:
+  nodeName: worker-a
+  containers:
+    - name: web
+      resources:
+        requests: {cpu: "500m", memory: 1Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-2
+  labels: {app: web}
+  ownerReferences: [{kind: ReplicaSet, name: web-5d8}]
+spec:
+  nodeName: worker-b
+  containers:
+    - name: web
+      resources:
+        requests: {cpu: "500m", memory: 1Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: batch-debug
+spec:
+  nodeName: worker-c
+  containers:
+    - name: debug
+      resources:
+        requests: {cpu: "1", memory: 2Gi}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: web}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {app: web}

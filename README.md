@@ -33,7 +33,9 @@
 | A rollout leaves replicas Pending because the cluster was already full | Greedy pod-fit simulation against allocatable CPU, memory and `nvidia.com/gpu`, with unschedulable replicas reported before deploy |
 | A one-line change restarts more workloads than anyone expected | Restart and create estimates for every changed manifest |
 | Someone shrinks a PVC or tightens a NetworkPolicy in a big diff | PVC shrink detection and NetworkPolicy, CiliumNetworkPolicy and CiliumClusterwideNetworkPolicy change warnings |
-| A strict PodDisruptionBudget blocks the drain mid-change | Strict PDB detection and ResourceQuota pressure checks |
+| A strict PodDisruptionBudget blocks the drain mid-change | Strict PDB detection and a drain simulation |
+| The API server rejects pods over a namespace quota or outside its LimitRange | `ADMISSION_QUOTA_*` and `ADMISSION_LIMITRANGE_*` findings before apply |
+| The cluster is half empty and nobody knows which nodes could go | `kairo consolidate`: which nodes can be emptied, and what that frees (with optional price inputs for a monthly estimate) |
 | Reviewers read YAML diffs and guess the risk | A blast-radius score, a LOW/MEDIUM/HIGH level and a SAFE/REVIEW/BLOCK verdict |
 | CI has no way to stop a risky change | `kairo plan` exits `3` on BLOCK, with `-json` output for pipelines |
 
@@ -59,7 +61,7 @@
 - Exposure and access control: new `LoadBalancer`/`NodePort` Services, Ingress changes, wildcard Roles/ClusterRoles, `cluster-admin` bindings.
 - `kairo plan -format text|json|markdown` (markdown is ready to post as a PR comment) and `-fail-on BLOCK|REVIEW|never` for CI gating.
 - YAML flow collections with plain scalars (`{name: web, ports: [80, 443]}`) are parsed, not just JSON-style ones.
-- ResourceQuota pressure checks.
+- ResourceQuota and LimitRange admission checks (see below), node drain, consolidation and optional cost estimates.
 - Blast-radius score, LOW/MEDIUM/HIGH level and SAFE/REVIEW/BLOCK verdict.
 - CLI, JSON REST API and polished zero-build web UI.
 - Docker image, health endpoint, GitHub Actions CI and unit/integration tests.
@@ -164,6 +166,35 @@ When a Deployment's pod template changes, `plan` also simulates the rollout peak
 
 Simulates `kubectl drain`: DaemonSet and static pods are ignored; pods without a controller are reported as lost (`DRAIN_UNMANAGED_POD`); other pods are evicted and rescheduled (largest first) onto the nodes that remain, honouring requests, `nodeSelector`, taints and cordons (`DRAIN_UNSCHEDULABLE`). A PodDisruptionBudget that allows no disruption blocks the drain (`DRAIN_PDB_BLOCKED`); one that allows fewer than needed serializes it (`DRAIN_PDB_SERIALIZED`). Also flagged: workloads whose every replica is on the drained nodes (`DRAIN_ALL_REPLICAS`) and emptyDir data loss (`DRAIN_LOCAL_DATA`). Verdicts are `SAFE`, `REVIEW` or `BLOCK`; `-fail-on` works as in `plan` (exit 3).
 
+### Consolidation / right-sizing simulation
+
+```bash
+./bin/kairo consolidate -cluster examples/consolidate-cluster.yaml
+./bin/kairo consolidate -cluster snapshot.yaml -format json -node-hour-price 0.12 -currency USD
+```
+
+Bin-packs the existing controller-managed pods onto fewer nodes with the same placement rules as `drain` (requests, `nodeSelector`, taints, cordons, PodDisruptionBudgets) and reports which nodes could be emptied, the pods that would move, the node count before and after, the CPU, memory and GPU capacity reclaimed, and requested utilisation before and after. A node stays when it holds an unmanaged pod, a pod annotated `karpenter.sh/do-not-disrupt: "true"` or `cluster-autoscaler.kubernetes.io/safe-to-evict: "false"`, a pod that fits nowhere else, or when a PDB has no budget left; the last node is always kept. DaemonSet and static pods are ignored (they vanish with the node).
+
+The plan is a deterministic greedy heuristic (emptiest node first, best-fit decreasing): achievable, not guaranteed minimal. Every result carries a `notModelled` list: pod/node affinity, topology spread, PersistentVolume topology and attach limits, observed usage (only requests are used, so this is not per-pod request right-sizing), max-pods and reservations, priority/preemption, node pools and autoscaler policies, and PDBs evolving over time.
+
+### Cost estimates
+
+`plan` and `consolidate` accept optional prices: `-node-hour-price`, `-gib-hour-price` and a `-currency` label (API: `prices: {nodeHourPrice, gibHourPrice, currency}`). They produce a `cost` object with a monthly delta over a fixed 730-hour month, negative for savings. For `consolidate` the node part is removed nodes times the node-hour price and the memory part is reclaimed GiB times the GiB-hour price. For `plan` the node part is the larger of the CPU and memory deltas as a proportional share of an average snapshot node, and the memory part prices the requested-memory delta. Use the GiB price only when memory is billed separately from the node, otherwise memory is counted twice. It is always labelled an estimate from your prices; Kairo makes no cloud pricing API calls, and with no prices there is no `cost` field.
+
+### Quota and LimitRange admission checks
+
+For each changed workload (and PVC), `plan` evaluates the ResourceQuota and LimitRange objects of its namespace, from the snapshot with the proposed manifests laid over them:
+
+| Code | Meaning |
+|---|---|
+| `ADMISSION_LIMITRANGE_MAX` | a container or pod limit/request is above the LimitRange `max` (or has no limit while a `max` is set and no `default` supplies one); a PVC is above the claim `max` |
+| `ADMISSION_LIMITRANGE_MIN` | a request or limit is below the `min` |
+| `ADMISSION_LIMITRANGE_RATIO` | limit/request exceeds `maxLimitRequestRatio` |
+| `ADMISSION_QUOTA_EXCEEDED` | projected namespace usage (`requests.cpu/memory`, `limits.cpu/memory`, `pods`, `requests.nvidia.com/gpu`) exceeds the quota and the change increased it |
+| `ADMISSION_QUOTA_NO_REQUESTS` | a quota constrains requests/limits that the pods do not set, even after LimitRange defaults |
+
+Defaults are applied the way the API server does: a missing request takes the explicit limit, then the LimitRange `defaultRequest`/`default`. These findings BLOCK (the API server rejects the pods) and replace the older `QUOTA_PRESSURE` check, which compared cluster-wide totals with a single namespace quota. Not modelled: scoped quotas (skipped), `count/*` object quotas, ephemeral storage, surge pods counting against quota.
+
 ## REST API
 
 ```bash
@@ -190,7 +221,11 @@ Request shape:
 }
 ```
 
-`targetVersion` is optional. `POST /api/v1/drain` takes `{"clusterYaml": "...", "nodes": ["worker-a"]}` and returns the drain result (`verdict`, `pods[]`, `risks[]`, counters). Invalid input returns 400, unknown node or bad target version 422.
+`targetVersion` and `prices` are optional. `POST /api/v1/consolidate` takes `{"clusterYaml": "...", "prices": {...}}` and returns the consolidation plan. `POST /api/v1/drain` takes `{"clusterYaml": "...", "nodes": ["worker-a"]}` and returns the drain result (`verdict`, `pods[]`, `risks[]`, counters). Invalid input returns 400, unknown node, bad target version or invalid prices 422. The full contract is in [`docs/openapi.yaml`](docs/openapi.yaml); a test fails when a registered route or a response field is missing from it.
+
+### Web console
+
+Beyond the plan simulator, the embedded console (`kairo serve`) has views for node drain, consolidation, rollout surge, API removal (with a target-version selector) and the `plan -explain` change list, plus optional price inputs. They call the same REST endpoints on the snapshot and proposal in the editors.
 
 ## Get a real cluster snapshot
 

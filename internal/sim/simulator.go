@@ -99,11 +99,22 @@ func Simulate(req Request) (Result, error) {
 	nodes := buildNodes(cluster)
 	hpas := collectHPAs(cluster, desired)
 	accountExistingPods(nodes, cluster)
-	baseCPU, baseMem, baseGPU := desiredResourceTotals(cluster, len(nodes))
+	// Compare like with like: only live objects the change replaces count as "before".
+	var replaced []map[string]any
+	for _, o := range cluster {
+		if _, ok := desiredMap[keyFor(o)]; ok {
+			replaced = append(replaced, o)
+		}
+	}
+	baseCPU, baseMem, baseGPU := desiredResourceTotals(replaced, len(nodes))
 	newCPU, newMem, newGPU := desiredResourceTotals(desired, len(nodes))
 	res.CPUDeltaCores = round2(newCPU - baseCPU)
 	res.MemoryDeltaBytes = newMem - baseMem
 	res.GPUDelta = newGPU - baseGPU
+	if err := req.Prices.validate(); err != nil {
+		return Result{}, err
+	}
+	res.Cost = planCost(req.Prices, res.CPUDeltaCores, res.MemoryDeltaBytes, nodes)
 
 	for _, obj := range desired {
 		kind, ns, name := metadata(obj)
@@ -173,19 +184,21 @@ func Simulate(req Request) (Result, error) {
 				res.PDBRisks++
 				res.Risks = append(res.Risks, Risk{"medium", "PDB_STRICT", "PDB may block voluntary disruptions", "The proposed PDB allows no voluntary unavailability and can block drains or upgrades.", ResourceRef{kind, ns, name}})
 			}
-		case "ResourceQuota":
-			if quotaLikelyTight(obj, newCPU, newMem) {
-				res.QuotaRisks++
-				res.Risks = append(res.Risks, Risk{"high", "QUOTA_PRESSURE", "Resource quota may reject workloads", "Requested aggregate resources are close to or above the proposed namespace quota.", ResourceRef{kind, ns, name}})
-			}
 		}
+	}
+
+	if rs, c := admissionRisks(cluster, desired, len(nodes)); len(rs) > 0 {
+		res.Risks = append(res.Risks, rs...)
+		res.QuotaRisks += c.quota
+		res.LimitRangeRisks += c.limitRange
 	}
 
 	res.ServicesAffected = estimateServiceImpact(cluster, desired, res.PodsRestarted, res.UnschedulablePods)
 	score := 0
 	score += minInt(45, res.UnschedulablePods*12)
 	score += res.PVCDestructiveRisks * 40
-	score += res.QuotaRisks * 25
+	score += minInt(50, res.QuotaRisks*25)
+	score += minInt(50, res.LimitRangeRisks*25)
 	score += res.PDBRisks * 12
 	score += minInt(15, res.NetworkPolicyChanges*8)
 	score += minInt(30, res.SecurityRisks*15)
@@ -212,7 +225,7 @@ func Simulate(req Request) (Result, error) {
 	default:
 		res.RiskLevel = "LOW"
 	}
-	if res.PVCDestructiveRisks > 0 || res.UnschedulablePods > 0 || res.QuotaRisks > 0 || res.APIRemoved > 0 {
+	if res.PVCDestructiveRisks > 0 || res.UnschedulablePods > 0 || res.QuotaRisks > 0 || res.LimitRangeRisks > 0 || res.APIRemoved > 0 {
 		res.Verdict = "BLOCK"
 	} else if score >= 30 || res.HPARisks > 0 || res.RolloutRisks > 0 {
 		res.Verdict = "REVIEW"
@@ -300,15 +313,6 @@ func desiredResourceTotals(objs []map[string]any, nodeCount int) (float64, int64
 	}
 	return c, m, g
 }
-func quotaLikelyTight(obj map[string]any, cpu float64, mem int64) bool {
-	hard := asMap(get(obj, "spec", "hard"))
-	if hard == nil {
-		return false
-	}
-	qc := parseCPU(hard["requests.cpu"])
-	qm := parseBytes(hard["requests.memory"])
-	return (qc > 0 && cpu > qc) || (qm > 0 && mem > qm)
-}
 func estimateServiceImpact(cluster, desired []map[string]any, restarts, uns int) int {
 	if restarts == 0 && uns == 0 {
 		return 0
@@ -350,7 +354,10 @@ func recommendations(r Result) []string {
 		x = append(x, "Relax the PDB during controlled maintenance or ensure spare replicas exist.")
 	}
 	if r.QuotaRisks > 0 {
-		x = append(x, "Increase ResourceQuota or reduce aggregate requests before applying the change.")
+		x = append(x, "Raise the namespace ResourceQuota, reduce replicas/requests, or set requests and limits so quota admission accepts the pods.")
+	}
+	if r.LimitRangeRisks > 0 {
+		x = append(x, "Bring container requests/limits inside the namespace LimitRange min/max (or change the LimitRange) before applying.")
 	}
 	if r.SecurityRisks > 0 {
 		x = append(x, "Remove privileged, host-namespace and hostPath settings, or document why the workload needs them.")
