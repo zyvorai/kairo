@@ -48,6 +48,9 @@
 - Existing bound Pod request accounting.
 - Deployment, StatefulSet, DaemonSet, Pod, Job and KubeVirt `VirtualMachine` request modelling.
 - Greedy pod-fit simulation with unschedulable-replica reporting.
+- Node cordon (`spec.unschedulable`) and `NoSchedule`/`NoExecute` taint awareness (excluded unless the pod tolerates them; DaemonSets tolerate cordons automatically and run one pod per eligible node) and `nodeSelector` matching against node labels.
+- HorizontalPodAutoscaler awareness: a changed Deployment/StatefulSet with an HPA uses `maxReplicas` as the capacity worst case. `HPA_MAX_UNSCHEDULABLE` is reported when the maximum cannot schedule, `HPA_MIN_EXCEEDS_REPLICAS` when `minReplicas` is above the declared replicas, and `HPA_INVALID_BOUNDS` when min exceeds max. These raise the verdict to at least REVIEW.
+- Risks are returned sorted by severity (critical first), then code, then resource, so output is stable.
 - Workload restart/create estimates for changed manifests.
 - PVC shrink detection.
 - NetworkPolicy, CiliumNetworkPolicy and CiliumClusterwideNetworkPolicy change warnings.
@@ -124,6 +127,14 @@ Exit codes:
 - `1`: parsing/runtime error
 - `2`: invalid CLI usage
 
+Show what changed per object (replicas, images, resource requests/limits):
+
+```bash
+./bin/kairo plan -cluster examples/cluster.yaml -f examples/desired.yaml -explain
+```
+
+With `-json`, `-explain` adds a `changes[]` array (`kind`, `namespace`, `name`, `action` of created/changed/deleted, and `fields[]` of `field`/`old`/`new`). The REST API always includes `changes`.
+
 Machine-readable output:
 
 ```bash
@@ -134,7 +145,11 @@ Machine-readable output:
 
 ```bash
 curl -s http://localhost:8080/healthz
+curl -s http://localhost:8080/readyz
+curl -s http://localhost:8080/api/v1/version
 ```
+
+Request bodies are limited to 4 MiB (413 beyond that); the server enforces read-header (5s), read (10s), write (20s) and idle (60s) timeouts.
 
 ```bash
 curl -s http://localhost:8080/api/v1/simulate \

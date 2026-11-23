@@ -11,6 +11,8 @@ for _ in $(seq 1 50); do
   if curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null; then break; fi
   sleep 0.1
 done
+curl -fsS "http://127.0.0.1:${PORT}/readyz" | grep -q '"ready":true'
+curl -fsS "http://127.0.0.1:${PORT}/api/v1/version" | grep -q '"service":"kairo"'
 curl -fsS "http://127.0.0.1:${PORT}/" | grep -q "Know before"
 python3 - <<PY
 import json, urllib.request
@@ -22,5 +24,9 @@ assert r['verdict']=='BLOCK', r
 assert r['unschedulablePods'] > 0, r
 assert r['pvcDestructiveRisks'] == 1, r
 assert 0 <= r['blastRadius'] <= 100, r
+sev={'critical':0,'high':1,'medium':2,'low':3,'info':4}
+keys=[(sev[x['severity']],x['code']) for x in r['risks']]
+assert keys==sorted(keys), keys
+assert r['changes'], r
 print('e2e ok:', r['clusterName'], r['verdict'], r['blastRadius'])
 PY

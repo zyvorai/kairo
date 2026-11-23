@@ -14,7 +14,17 @@ import (
 	"time"
 )
 
+// MaxBodyBytes caps a simulate request body.
+const MaxBodyBytes = 4 << 20
+
+// NewHTTPServer returns an http.Server with the read/write/idle limits Kairo
+// serves with, so slow or stalled clients cannot hold connections open.
+func NewHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 16}
+}
+
 type Server struct {
+	Version        string
 	Log            *slog.Logger
 	Web            http.Handler
 	ExampleCluster string
@@ -26,6 +36,16 @@ func (s Server) Handler() http.Handler {
 	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"ok": true, "service": "kairo", "time": time.Now().UTC()})
 	})
+	m.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"ready": true, "service": "kairo"})
+	})
+	m.HandleFunc("GET /api/v1/version", func(w http.ResponseWriter, r *http.Request) {
+		v := s.Version
+		if v == "" {
+			v = "dev"
+		}
+		writeJSON(w, 200, map[string]string{"service": "kairo", "version": v})
+	})
 	m.HandleFunc("GET /api/v1/examples", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"clusterYaml": s.ExampleCluster, "desiredYaml": s.ExampleDesired})
 	})
@@ -34,7 +54,7 @@ func (s Server) Handler() http.Handler {
 	return logging(s.Log, m)
 }
 func (s Server) simulate(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<20))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
 	if err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {

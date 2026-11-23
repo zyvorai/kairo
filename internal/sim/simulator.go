@@ -14,9 +14,12 @@ import (
 const maxReplicas = 100000
 
 type nodeState struct {
-	name string
-	cap  resources
-	free resources
+	name          string
+	cap           resources
+	free          resources
+	unschedulable bool
+	taints        []taint
+	labels        map[string]string
 }
 
 func Simulate(req Request) (Result, error) {
@@ -77,6 +80,7 @@ func Simulate(req Request) (Result, error) {
 	}
 
 	nodes := buildNodes(cluster)
+	hpas := collectHPAs(cluster, desired)
 	accountExistingPods(nodes, cluster)
 	baseCPU, baseMem, baseGPU := desiredResourceTotals(cluster, len(nodes))
 	newCPU, newMem, newGPU := desiredResourceTotals(desired, len(nodes))
@@ -93,17 +97,28 @@ func Simulate(req Request) (Result, error) {
 		}
 		replicas := replicasFor(obj, len(nodes))
 		spec := podSpecFor(obj)
-		if spec != nil && replicas > 0 {
+		if spec != nil && (replicas > 0 || kind == "DaemonSet") {
+			rq := resourceReq(spec)
+			pl := placementFor(spec, kind == "DaemonSet")
+			unscheduled := 0
+			if kind == "DaemonSet" {
+				replicas, unscheduled = scheduleDaemonSet(nodes, rq, pl)
+			} else {
+				unscheduled = schedule(nodes, rq, replicas, pl)
+			}
 			if old != nil {
 				res.PodsRestarted += replicas
 			} else {
 				res.PodsCreated += replicas
 			}
-			rq := resourceReq(spec)
-			unscheduled := schedule(nodes, rq, replicas)
 			if unscheduled > 0 {
 				res.UnschedulablePods += unscheduled
 				res.Risks = append(res.Risks, Risk{"high", "UNSCHEDULABLE", "Workload cannot fully schedule", fmt.Sprintf("%d of %d replicas cannot fit on the current node capacity.", unscheduled, replicas), ResourceRef{kind, ns, name}})
+			}
+			if hpa := findHPA(hpas, obj); hpa != nil {
+				hr := hpaRisks(hpa, obj, replicas, nodes, rq, pl)
+				res.HPARisks += len(hr)
+				res.Risks = append(res.Risks, hr...)
 			}
 		}
 		if rs, c := extraRisks(obj, old); len(rs) > 0 {
@@ -150,6 +165,7 @@ func Simulate(req Request) (Result, error) {
 	score += minInt(30, res.SecurityRisks*15)
 	score += minInt(16, res.ExposureChanges*8)
 	score += minInt(45, res.RBACRisks*20)
+	score += minInt(20, res.HPARisks*10)
 	if res.PodsRestarted > 0 {
 		score += minInt(12, int(math.Ceil(float64(res.PodsRestarted)/10)))
 	}
@@ -170,11 +186,13 @@ func Simulate(req Request) (Result, error) {
 	}
 	if res.PVCDestructiveRisks > 0 || res.UnschedulablePods > 0 || res.QuotaRisks > 0 {
 		res.Verdict = "BLOCK"
-	} else if score >= 30 {
+	} else if score >= 30 || res.HPARisks > 0 {
 		res.Verdict = "REVIEW"
 	} else {
 		res.Verdict = "SAFE"
 	}
+	res.Changes = diffObjects(live, desiredMap)
+	sortRisks(res.Risks)
 	res.Recommendations = recommendations(res)
 	for _, n := range nodes {
 		res.Nodes = append(res.Nodes, NodeResult{n.name, round2(n.cap.cpu), round2(n.free.cpu), n.cap.mem, n.free.mem, n.cap.gpu, n.free.gpu})
@@ -199,7 +217,20 @@ func buildNodes(objs []map[string]any) []*nodeState {
 		name := str(get(o, "metadata", "name"))
 		alloc := asMap(get(o, "status", "allocatable"))
 		cap := resources{parseCPU(alloc["cpu"]), parseBytes(alloc["memory"]), int64(intValue(alloc["nvidia.com/gpu"], 0))}
-		out = append(out, &nodeState{name, cap, cap})
+		n := &nodeState{name: name, cap: cap, free: cap, labels: map[string]string{}}
+		if b, ok := get(o, "spec", "unschedulable").(bool); ok {
+			n.unschedulable = b
+		} else {
+			n.unschedulable = str(get(o, "spec", "unschedulable")) == "true"
+		}
+		for _, t := range asSlice(get(o, "spec", "taints")) {
+			tm := asMap(t)
+			n.taints = append(n.taints, taint{str(tm["key"]), str(tm["value"]), str(tm["effect"])})
+		}
+		for k, v := range asMap(get(o, "metadata", "labels")) {
+			n.labels[k] = str(v)
+		}
+		out = append(out, n)
 	}
 	return out
 }
@@ -221,27 +252,6 @@ func accountExistingPods(nodes []*nodeState, objs []map[string]any) {
 		node.free.mem -= r.mem
 		node.free.gpu -= r.gpu
 	}
-}
-func schedule(nodes []*nodeState, r resources, replicas int) int {
-	uns := 0
-	for i := 0; i < replicas; i++ {
-		best := -1
-		for j, n := range nodes {
-			if n.free.cpu+1e-9 >= r.cpu && n.free.mem >= r.mem && n.free.gpu >= r.gpu {
-				if best < 0 || n.free.mem > nodes[best].free.mem {
-					best = j
-				}
-			}
-		}
-		if best < 0 {
-			uns++
-			continue
-		}
-		nodes[best].free.cpu -= r.cpu
-		nodes[best].free.mem -= r.mem
-		nodes[best].free.gpu -= r.gpu
-	}
-	return uns
 }
 func desiredResourceTotals(objs []map[string]any, nodeCount int) (float64, int64, int64) {
 	var c float64
@@ -322,6 +332,9 @@ func recommendations(r Result) []string {
 	}
 	if r.RBACRisks > 0 {
 		x = append(x, "Replace wildcard or cluster-admin grants with least-privilege roles.")
+	}
+	if r.HPARisks > 0 {
+		x = append(x, "Raise node capacity for the HPA maxReplicas, lower maxReplicas, or align minReplicas with the workload replicas.")
 	}
 	if len(x) == 0 {
 		x = append(x, "No blocking capacity or destructive-storage issue was detected. Continue with normal progressive delivery safeguards.")
