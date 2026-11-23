@@ -23,6 +23,10 @@ type nodeState struct {
 }
 
 func Simulate(req Request) (Result, error) {
+	target, err := parseTargetVersion(req.TargetVersion)
+	if err != nil {
+		return Result{}, err
+	}
 	cluster, err := ParseDocuments(req.ClusterYAML)
 	if err != nil {
 		return Result{}, fmt.Errorf("parse cluster snapshot: %w", err)
@@ -31,7 +35,7 @@ func Simulate(req Request) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("parse desired manifests: %w", err)
 	}
-	res := Result{ClusterName: "kubernetes", ObjectsAnalyzed: len(cluster) + len(desired), Risks: []Risk{}, Recommendations: []string{}}
+	res := Result{TargetVersion: target.String(), ClusterName: "kubernetes", ObjectsAnalyzed: len(cluster) + len(desired), Risks: []Risk{}, Recommendations: []string{}}
 	live := map[string]map[string]any{}
 	for _, o := range cluster {
 		live[keyFor(o)] = o
@@ -79,6 +83,19 @@ func Simulate(req Request) (Result, error) {
 		}
 	}
 
+	for _, o := range desired {
+		if rs := apiVersionRisks(o, target); len(rs) > 0 {
+			for _, r := range rs {
+				if r.Code == "API_REMOVED" {
+					res.APIRemoved++
+				} else {
+					res.APIDeprecated++
+				}
+			}
+			res.Risks = append(res.Risks, rs...)
+		}
+	}
+
 	nodes := buildNodes(cluster)
 	hpas := collectHPAs(cluster, desired)
 	accountExistingPods(nodes, cluster)
@@ -114,6 +131,15 @@ func Simulate(req Request) (Result, error) {
 			if unscheduled > 0 {
 				res.UnschedulablePods += unscheduled
 				res.Risks = append(res.Risks, Risk{"high", "UNSCHEDULABLE", "Workload cannot fully schedule", fmt.Sprintf("%d of %d replicas cannot fit on the current node capacity.", unscheduled, replicas), ResourceRef{kind, ns, name}})
+			}
+			if unscheduled == 0 {
+				if rr := rolloutSurgeRisk(old, obj, replicas, nodes, rq, pl); rr != nil {
+					res.RolloutRisks++
+					if rr.Severity == "high" {
+						res.RolloutStalls++
+					}
+					res.Risks = append(res.Risks, *rr)
+				}
 			}
 			if hpa := findHPA(hpas, obj); hpa != nil {
 				hr := hpaRisks(hpa, obj, replicas, nodes, rq, pl)
@@ -166,6 +192,8 @@ func Simulate(req Request) (Result, error) {
 	score += minInt(16, res.ExposureChanges*8)
 	score += minInt(45, res.RBACRisks*20)
 	score += minInt(20, res.HPARisks*10)
+	score += minInt(24, res.RolloutStalls*20+(res.RolloutRisks-res.RolloutStalls)*8)
+	score += minInt(60, res.APIRemoved*40+res.APIDeprecated*5)
 	if res.PodsRestarted > 0 {
 		score += minInt(12, int(math.Ceil(float64(res.PodsRestarted)/10)))
 	}
@@ -184,9 +212,9 @@ func Simulate(req Request) (Result, error) {
 	default:
 		res.RiskLevel = "LOW"
 	}
-	if res.PVCDestructiveRisks > 0 || res.UnschedulablePods > 0 || res.QuotaRisks > 0 {
+	if res.PVCDestructiveRisks > 0 || res.UnschedulablePods > 0 || res.QuotaRisks > 0 || res.APIRemoved > 0 {
 		res.Verdict = "BLOCK"
-	} else if score >= 30 || res.HPARisks > 0 {
+	} else if score >= 30 || res.HPARisks > 0 || res.RolloutRisks > 0 {
 		res.Verdict = "REVIEW"
 	} else {
 		res.Verdict = "SAFE"
@@ -244,7 +272,7 @@ func accountExistingPods(nodes []*nodeState, objs []map[string]any) {
 			continue
 		}
 		node := by[str(get(o, "spec", "nodeName"))]
-		if node == nil {
+		if node == nil || podTerminated(o) {
 			continue
 		}
 		r := resourceReq(asMap(o["spec"]))
@@ -336,6 +364,15 @@ func recommendations(r Result) []string {
 	if r.HPARisks > 0 {
 		x = append(x, "Raise node capacity for the HPA maxReplicas, lower maxReplicas, or align minReplicas with the workload replicas.")
 	}
+	if r.RolloutRisks > 0 {
+		x = append(x, "Add node headroom for the rollout surge, lower maxSurge, or allow maxUnavailable so the rolling update can complete.")
+	}
+	if r.APIRemoved > 0 {
+		x = append(x, "Migrate manifests off removed API versions (see each finding for the replacement) before applying; the API server will reject them.")
+	}
+	if r.APIDeprecated > 0 {
+		x = append(x, "Plan a migration off deprecated API versions before they are removed.")
+	}
 	if len(x) == 0 {
 		x = append(x, "No blocking capacity or destructive-storage issue was detected. Continue with normal progressive delivery safeguards.")
 	}
@@ -365,11 +402,19 @@ Verdict: %s   Risk: %s   Blast radius: %d/100
 Objects: %d analyzed · %d changed · %d created
 Pods: %d restarted · %d created · %d unschedulable
 Services affected: %d · Network-policy changes: %d · PVC risks: %d
-CPU delta: %.2f cores · Memory delta: %s · GPU delta: %d`, r.ClusterName, r.Verdict, r.RiskLevel, r.BlastRadius, r.ObjectsAnalyzed, r.ChangedObjects, r.CreatedObjects, r.PodsRestarted, r.PodsCreated, r.UnschedulablePods, r.ServicesAffected, r.NetworkPolicyChanges, r.PVCDestructiveRisks, r.CPUDeltaCores, humanBytes(abs64(r.MemoryDeltaBytes)), r.GPUDelta))
+Rollout risks: %d · API removed: %d · API deprecated: %d (target %s)
+CPU delta: %.2f cores · Memory delta: %s · GPU delta: %d`, r.ClusterName, r.Verdict, r.RiskLevel, r.BlastRadius, r.ObjectsAnalyzed, r.ChangedObjects, r.CreatedObjects, r.PodsRestarted, r.PodsCreated, r.UnschedulablePods, r.ServicesAffected, r.NetworkPolicyChanges, r.PVCDestructiveRisks, r.RolloutRisks, r.APIRemoved, r.APIDeprecated, r.TargetVersion, r.CPUDeltaCores, humanBytes(abs64(r.MemoryDeltaBytes)), r.GPUDelta))
 }
 func abs64(v int64) int64 {
 	if v < 0 {
 		return -v
 	}
 	return v
+}
+
+// podTerminated reports whether a pod finished (Succeeded or Failed); such
+// pods no longer hold their resource requests on the node.
+func podTerminated(o map[string]any) bool {
+	p := str(get(o, "status", "phase"))
+	return p == "Succeeded" || p == "Failed"
 }

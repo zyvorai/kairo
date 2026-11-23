@@ -36,7 +36,7 @@ spec:
         - name: a
           securityContext: {privileged: true}
 `
-	r, err := Simulate(Request{oneNode, desired})
+	r, err := Simulate(Request{ClusterYAML: oneNode, DesiredYAML: desired})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ spec:
         - name: a
           securityContext: {privileged: true}
 `
-	r, err := Simulate(Request{cluster, desired})
+	r, err := Simulate(Request{ClusterYAML: cluster, DesiredYAML: desired})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ roleRef: {kind: ClusterRole, name: cluster-admin}
 subjects:
   - {kind: User, name: alice}
 `
-	r, err := Simulate(Request{oneNode, desired})
+	r, err := Simulate(Request{ClusterYAML: oneNode, DesiredYAML: desired})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ subjects:
 
 func TestUnchangedServiceTypeNotFlagged(t *testing.T) {
 	svc := "apiVersion: v1\nkind: Service\nmetadata: {name: web}\nspec: {type: NodePort}\n"
-	r, err := Simulate(Request{oneNode + "---\n" + svc, svc})
+	r, err := Simulate(Request{ClusterYAML: oneNode + "---\n" + svc, DesiredYAML: svc})
 	if err != nil {
 		t.Fatal(err)
 	}

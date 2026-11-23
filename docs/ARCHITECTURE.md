@@ -27,10 +27,16 @@ Kairo is split into four surfaces around one deterministic simulation package.
 3. Build allocatable node state from Node status, including cordon (`spec.unschedulable`), taints and labels.
 4. Subtract requests from currently bound Pods.
 5. For each changed/new workload, extract pod requests and simulate placement using a deterministic best-free-memory greedy strategy on nodes the pod may use (tolerations, `nodeSelector`). If an HPA targets the workload, the extra replicas up to `maxReplicas` are placed on a copy of the node state to detect `HPA_MAX_UNSCHEDULABLE`.
-6. Evaluate object-specific risks (PVC shrink, policy change, strict PDB and quota pressure).
-7. Calculate operational deltas and a bounded blast-radius score.
-8. Sort risks by severity, code and resource; compute a per-object `changes[]` diff (replicas, images, requests/limits).
-9. Return `SAFE`, `REVIEW` or `BLOCK` plus findings and recommendations.
+   For a Deployment whose pod template changed, `maxSurge` extra pods are then placed on a copy of the resulting state (`internal/sim/rollout.go`) to detect `ROLLOUT_SURGE_UNSCHEDULABLE`. Steady-state failures are reported alone to avoid duplicate findings.
+6. Check each desired object's `apiVersion` against the removal table for the target version (`internal/sim/apis.go`).
+7. Evaluate object-specific risks (PVC shrink, policy change, strict PDB and quota pressure).
+8. Calculate operational deltas and a bounded blast-radius score.
+9. Sort risks by severity, code and resource; compute a per-object `changes[]` diff (replicas, images, requests/limits).
+10. Return `SAFE`, `REVIEW` or `BLOCK` plus findings and recommendations.
+
+## Drain simulation
+
+`sim.Drain` (`internal/sim/drain.go`) is a separate entry point over the same snapshot and node model. It classifies pods on the target nodes (ignore DaemonSet/static, flag unmanaged, evict the rest), evaluates PodDisruptionBudgets (selector match incl. `matchExpressions`, healthy/expected counts, `minAvailable`/`maxUnavailable` as int or percent), then reschedules evictees largest-first onto the remaining nodes with the shared `schedule` function. Completed (Succeeded/Failed) pods hold no capacity and are skipped everywhere. Limits: affinity/anti-affinity, topology spread and PV topology are not modelled; PDB `unhealthyPodEvictionPolicy` is ignored; budgets are evaluated against the snapshot, not as replacements become ready.
 
 ## Why the engine does not pretend to be kube-scheduler
 

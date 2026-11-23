@@ -141,6 +141,29 @@ Machine-readable output:
 ./bin/kairo plan -cluster examples/cluster.yaml -f examples/desired.yaml -json
 ```
 
+### Rolling-update surge check
+
+When a Deployment's pod template changes, `plan` also simulates the rollout peak: `maxSurge` extra pods (default 25%, rounded up) are placed on top of the steady-state placement. If they cannot be scheduled the finding `ROLLOUT_SURGE_UNSCHEDULABLE` is raised: `high` when `maxUnavailable` is 0 (the rollout can never finish), `medium` otherwise (it proceeds with reduced capacity). Verdict is at least `REVIEW`. `Recreate` strategy, replica-only changes and new Deployments are not rollouts and are not flagged.
+
+### Removed / deprecated API versions
+
+`plan` checks every desired object's `apiVersion` against a curated removal table (extensions/v1beta1, batch/v1beta1, policy/v1beta1, autoscaling/v2beta*, networking.k8s.io/v1beta1 and more). Use `-target-version` to choose the Kubernetes version the manifests must be valid on (default: newest known, 1.33):
+
+```bash
+./bin/kairo plan -cluster examples/cluster.yaml -f desired.yaml -target-version 1.25
+```
+
+`API_REMOVED` (critical, verdict `BLOCK`) means the API server rejects the manifest at that version; `API_DEPRECATED` (medium) means it still works but is scheduled for removal. The result carries `targetVersion`, `apiRemoved` and `apiDeprecated`.
+
+### Node drain / upgrade simulation
+
+```bash
+./bin/kairo drain -cluster examples/drain-cluster.yaml -node worker-a        # one node
+./bin/kairo drain -cluster snapshot.yaml -node pool-1,pool-2 -format json    # an upgrade wave
+```
+
+Simulates `kubectl drain`: DaemonSet and static pods are ignored; pods without a controller are reported as lost (`DRAIN_UNMANAGED_POD`); other pods are evicted and rescheduled (largest first) onto the nodes that remain, honouring requests, `nodeSelector`, taints and cordons (`DRAIN_UNSCHEDULABLE`). A PodDisruptionBudget that allows no disruption blocks the drain (`DRAIN_PDB_BLOCKED`); one that allows fewer than needed serializes it (`DRAIN_PDB_SERIALIZED`). Also flagged: workloads whose every replica is on the drained nodes (`DRAIN_ALL_REPLICAS`) and emptyDir data loss (`DRAIN_LOCAL_DATA`). Verdicts are `SAFE`, `REVIEW` or `BLOCK`; `-fail-on` works as in `plan` (exit 3).
+
 ## REST API
 
 ```bash
@@ -162,9 +185,12 @@ Request shape:
 ```json
 {
   "clusterYaml": "apiVersion: v1\nkind: Node\n...",
-  "desiredYaml": "apiVersion: apps/v1\nkind: Deployment\n..."
+  "desiredYaml": "apiVersion: apps/v1\nkind: Deployment\n...",
+  "targetVersion": "1.29"
 }
 ```
+
+`targetVersion` is optional. `POST /api/v1/drain` takes `{"clusterYaml": "...", "nodes": ["worker-a"]}` and returns the drain result (`verdict`, `pods[]`, `risks[]`, counters). Invalid input returns 400, unknown node or bad target version 422.
 
 ## Get a real cluster snapshot
 

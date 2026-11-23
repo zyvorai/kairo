@@ -127,3 +127,39 @@ func TestSimulateRisksDeterministicOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestDrainEndpoint(t *testing.T) {
+	cluster := `kind: Node\nmetadata: {name: n}\nstatus: {allocatable: {cpu: \"1\", memory: 1Gi}}`
+	cases := []struct {
+		name, body string
+		want       int
+		contains   string
+	}{
+		{"invalid json", `{`, 400, ""},
+		{"missing nodes", `{"clusterYaml":"a: 1"}`, 400, ""},
+		{"unknown node", `{"clusterYaml":"` + cluster + `","nodes":["zzz"]}`, 422, "not found"},
+		{"ok", `{"clusterYaml":"` + cluster + `","nodes":["n"]}`, 200, `"verdict":"SAFE"`},
+		{"too large", `{"clusterYaml":"` + strings.Repeat("a", 5<<20) + `"}`, 413, ""},
+	}
+	for _, c := range cases {
+		w := serve(t, "POST", "/api/v1/drain", c.body)
+		if w.Code != c.want || !strings.Contains(w.Body.String(), c.contains) {
+			t.Errorf("%s: got %d %s", c.name, w.Code, w.Body)
+		}
+	}
+}
+
+func TestSimulateTargetVersion(t *testing.T) {
+	body := func(target string) string {
+		return `{"clusterYaml":"kind: Node\nmetadata: {name: n}\nstatus: {allocatable: {cpu: \"1\", memory: 1Gi}}","desiredYaml":"apiVersion: batch/v1beta1\nkind: CronJob\nmetadata: {name: j}","targetVersion":"` + target + `"}`
+	}
+	if w := serve(t, "POST", "/api/v1/simulate", body("1.25")); w.Code != 200 || !strings.Contains(w.Body.String(), "API_REMOVED") {
+		t.Errorf("1.25: %d %s", w.Code, w.Body)
+	}
+	if w := serve(t, "POST", "/api/v1/simulate", body("1.24")); w.Code != 200 || strings.Contains(w.Body.String(), "API_REMOVED") {
+		t.Errorf("1.24: %d %s", w.Code, w.Body)
+	}
+	if w := serve(t, "POST", "/api/v1/simulate", body("nope")); w.Code != 422 {
+		t.Errorf("invalid: %d %s", w.Code, w.Body)
+	}
+}

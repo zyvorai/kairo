@@ -1,0 +1,46 @@
+# Upgrade-wave fixture for `kairo drain -cluster examples/drain-cluster.yaml -node worker-a`.
+apiVersion: v1
+kind: Node
+metadata: {name: worker-a}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Node
+metadata: {name: worker-b}
+status:
+  allocatable: {cpu: "4", memory: 16Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-1
+  labels: {app: api}
+  ownerReferences: [{kind: ReplicaSet, name: api-7d9}]
+spec:
+  nodeName: worker-a
+  containers:
+    - name: api
+      resources:
+        requests: {cpu: "1", memory: 2Gi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-2
+  labels: {app: api}
+  ownerReferences: [{kind: ReplicaSet, name: api-7d9}]
+spec:
+  nodeName: worker-b
+  containers:
+    - name: api
+      resources:
+        requests: {cpu: "1", memory: 2Gi}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: api}
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: {app: api}
