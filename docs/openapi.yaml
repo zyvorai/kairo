@@ -138,6 +138,82 @@ paths:
         "400": {$ref: "#/components/responses/BadRequest"}
         "413": {$ref: "#/components/responses/TooLarge"}
         "422": {$ref: "#/components/responses/Unprocessable"}
+  /api/v1/disruption:
+    post:
+      summary: Score how disruptive removing each node would be (kairo disruption)
+      description: >
+        A transparent weighted score per node from PodDisruptionBudgets,
+        single-replica and all-replicas-here workloads, local state, placement
+        constraints and declared probe startup time. Every factor shows its
+        points and inputs; missing inputs are listed in unknowns, not defaulted.
+      operationId: disruption
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisruptionRequest"
+      responses:
+        "200":
+          description: Nodes, least disruptive first, with the scoring model.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisruptionResult"
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "422": {$ref: "#/components/responses/Unprocessable"}
+  /api/v1/rightsize:
+    post:
+      summary: What-if request right-sizing from supplied usage samples (kairo rightsize)
+      description: >
+        Recommends requests from CPU/memory samples you supply (percentile plus
+        an explicit safety margin, with a distribution-free confidence interval),
+        then consolidates the snapshot under today's, optimistic, expected and
+        conservative requests to show nodes and cost as a band. Advisory only:
+        nothing is changed. Samples that are not finite non-negative numbers are rejected.
+      operationId: rightsize
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RightsizeRequest"
+      responses:
+        "200":
+          description: Per-container recommendations and the scenario band.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RightsizeResult"
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "422": {$ref: "#/components/responses/Unprocessable"}
+  /api/v1/resilience:
+    post:
+      summary: Capacity-pool and zone loss report (kairo resilience)
+      description: >
+        Groups nodes by capacity type, instance type and zone labels, reports
+        diversification, and simulates losing each spot pool and each zone at
+        once (PodDisruptionBudgets are ignored: a cloud reclaim does not honour
+        them). Nodes without labels are listed under unknowns, not guessed.
+      operationId: resilience
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResilienceRequest"
+      responses:
+        "200":
+          description: Diversity, loss scenarios and findings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResilienceResult"
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "422": {$ref: "#/components/responses/Unprocessable"}
 components:
   responses:
     BadRequest:
@@ -361,6 +437,232 @@ components:
           type: array
           items: {$ref: "#/components/schemas/ConsolidateMove"}
         cost: {$ref: "#/components/schemas/CostEstimate"}
+        summary: {type: string}
+        notModelled:
+          type: array
+          items: {type: string}
+    DisruptionRequest:
+      type: object
+      required: [clusterYaml]
+      properties:
+        clusterYaml: {type: string}
+    DisruptionFactor:
+      type: object
+      properties:
+        code: {type: string}
+        points: {type: number}
+        maxPoints: {type: number}
+        detail: {type: string}
+        pods:
+          type: array
+          items: {type: string}
+    DisruptionNode:
+      type: object
+      properties:
+        name: {type: string}
+        score: {type: integer, minimum: 0, maximum: 100}
+        level: {type: string, enum: [LOW, MEDIUM, HIGH, BLOCKED]}
+        blockers:
+          type: array
+          items: {type: string}
+        removable: {type: boolean, description: True when consolidate can empty this node on its own.}
+        pods: {type: integer}
+        factors:
+          type: array
+          items: {$ref: "#/components/schemas/DisruptionFactor"}
+        unknowns:
+          type: array
+          items: {type: string}
+    DisruptionWeight:
+      type: object
+      properties:
+        code: {type: string}
+        maxPoints: {type: number}
+        saturatesAt: {type: number}
+        unit: {type: string}
+        description: {type: string}
+    DisruptionResult:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items: {$ref: "#/components/schemas/DisruptionNode"}
+        weights:
+          type: array
+          items: {$ref: "#/components/schemas/DisruptionWeight"}
+        warnings:
+          type: array
+          items: {type: string}
+        summary: {type: string}
+        notModelled:
+          type: array
+          items: {type: string}
+    UsageSeries:
+      type: object
+      required: [workload, container]
+      properties:
+        namespace: {type: string, description: Defaults to "default".}
+        workload: {type: string, description: Pod name, controller name, or Deployment name.}
+        container: {type: string}
+        cpuCores:
+          type: array
+          items: {type: number}
+        memoryBytes:
+          type: array
+          items: {type: number}
+    UsageData:
+      type: object
+      required: [series]
+      properties:
+        series:
+          type: array
+          maxItems: 2000
+          items: {$ref: "#/components/schemas/UsageSeries"}
+    RightsizeOptions:
+      type: object
+      properties:
+        cpuPercentile: {type: number, description: "(0,1], default 0.95."}
+        memoryPercentile: {type: number, description: "(0,1], default 0.99; 1 sizes on the observed peak."}
+        cpuMargin: {type: number, description: "0..5, default 0.15."}
+        memoryMargin: {type: number, description: "0..5, default 0.20."}
+        minSamples: {type: integer, description: "Default 30."}
+        confidence: {type: number, description: "0.5..0.999, default 0.90."}
+    RightsizeRequest:
+      type: object
+      required: [clusterYaml, usage]
+      properties:
+        clusterYaml: {type: string}
+        usage: {$ref: "#/components/schemas/UsageData"}
+        options: {$ref: "#/components/schemas/RightsizeOptions"}
+        prices: {$ref: "#/components/schemas/Prices"}
+    EffectiveOptions:
+      type: object
+      properties:
+        cpuPercentile: {type: number}
+        memoryPercentile: {type: number}
+        cpuMargin: {type: number}
+        memoryMargin: {type: number}
+        minSamples: {type: integer}
+        confidence: {type: number}
+        minCpuCores: {type: number}
+        minMemoryBytes: {type: integer, format: int64}
+    ResourceRec:
+      type: object
+      properties:
+        samples: {type: integer}
+        percentile: {type: number}
+        observed: {type: number}
+        max: {type: number}
+        lower: {type: number}
+        upper: {type: number}
+        lowerOpen: {type: boolean}
+        upperOpen: {type: boolean}
+        margin: {type: number}
+        current: {type: number, description: Today's request per pod; 0 when none is set.}
+        optimistic: {type: number}
+        expected: {type: number}
+        conservative: {type: number}
+        aboveExpected: {type: integer}
+        basis: {type: string}
+    RightsizeContainer:
+      type: object
+      properties:
+        namespace: {type: string}
+        workload: {type: string}
+        container: {type: string}
+        status: {type: string, enum: [recommended, insufficient-samples, unmatched]}
+        pods: {type: integer}
+        cpu: {$ref: "#/components/schemas/ResourceRec"}
+        memory: {$ref: "#/components/schemas/ResourceRec"}
+        notes:
+          type: array
+          items: {type: string}
+    RightsizeScenario:
+      type: object
+      properties:
+        name: {type: string, enum: [current, optimistic, expected, conservative]}
+        description: {type: string}
+        cpuRequestedCores: {type: number}
+        memoryRequestedBytes: {type: integer, format: int64}
+        nodesBefore: {type: integer}
+        nodesAfter: {type: integer}
+        removable:
+          type: array
+          items: {type: string}
+        additionalNodesRemovable: {type: integer}
+        cost: {$ref: "#/components/schemas/CostEstimate"}
+        additionalMonthlyDelta: {type: number}
+    RightsizeResult:
+      type: object
+      properties:
+        options: {$ref: "#/components/schemas/EffectiveOptions"}
+        containers:
+          type: array
+          items: {$ref: "#/components/schemas/RightsizeContainer"}
+        scenarios:
+          type: array
+          items: {$ref: "#/components/schemas/RightsizeScenario"}
+        noUsageData:
+          type: array
+          items: {type: string}
+        noUsageDataCount: {type: integer}
+        summary: {type: string}
+        notModelled:
+          type: array
+          items: {type: string}
+    ResilienceRequest:
+      type: object
+      required: [clusterYaml]
+      properties:
+        clusterYaml: {type: string}
+    ResilienceScenario:
+      type: object
+      properties:
+        kind: {type: string, enum: [pool, zone]}
+        name: {type: string}
+        capacityType: {type: string}
+        instanceType: {type: string}
+        zone: {type: string}
+        nodes:
+          type: array
+          items: {type: string}
+        cpuShare: {type: number}
+        nodeShare: {type: number}
+        verdict: {type: string, enum: [SAFE, REVIEW, BLOCK]}
+        evicted: {type: integer}
+        unschedulable: {type: integer}
+        unmanaged: {type: integer}
+        risks:
+          type: array
+          items: {$ref: "#/components/schemas/Risk"}
+    CapacityDiversity:
+      type: object
+      properties:
+        capacityType: {type: string}
+        nodes: {type: integer}
+        instanceTypes: {type: integer}
+        zones: {type: integer}
+        largestPool: {type: string}
+        largestPoolShare: {type: number}
+        cpuShareOfCluster: {type: number}
+    ResilienceResult:
+      type: object
+      properties:
+        diversity:
+          type: array
+          items: {$ref: "#/components/schemas/CapacityDiversity"}
+        scenarios:
+          type: array
+          items: {$ref: "#/components/schemas/ResilienceScenario"}
+        findings:
+          type: array
+          items: {$ref: "#/components/schemas/Risk"}
+        unknowns:
+          type: array
+          items: {type: string}
+        thresholds:
+          type: array
+          items: {type: string}
         summary: {type: string}
         notModelled:
           type: array

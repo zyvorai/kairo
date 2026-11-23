@@ -80,6 +80,7 @@ loadDemo().then(runSimulation).catch(e => { $('object-count').textContent = e.me
 // Everything interpolated into HTML goes through esc(); numbers are coerced with num().
 const esc = (v) => escapeHTML(String(v == null ? '' : v));
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const joinEsc = (a, sep = ', ') => (a || []).map(esc).join(sep);
 const pct = (v) => `${Math.round(num(v) * 100)}%`;
 function bytes(n) { return humanBytes(num(n)).replace(/^\+/, ''); }
 const verdictColor = (v) => v === 'BLOCK' ? '#d70015' : v === 'REVIEW' ? '#b25000' : '#15803d';
@@ -151,6 +152,46 @@ function renderConsolidate(r) {
     `<div class="x-h">Not modelled</div><ul class="x-list">${r.notModelled.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
 }
 
+function renderDisruption(r) {
+  const cards = r.nodes.map(n => {
+    const factors = n.factors.filter(f => num(f.points) > 0).map(f => `<tr><td>${esc(f.code)}</td><td>+${num(f.points).toFixed(1)} / ${num(f.maxPoints)}</td><td>${esc(f.detail)}${f.pods && f.pods.length ? ` <small>(${joinEsc(f.pods)})</small>` : ''}</td></tr>`).join('');
+    const blockers = n.blockers.map(b => `<div class="risk high"><div class="risk-head"><span class="risk-dot"></span>Blocker</div><p>${esc(b)}</p></div>`).join('');
+    const unknowns = n.unknowns.length ? `<ul class="x-list">${n.unknowns.map(u => `<li>Unknown: ${esc(u)}</li>`).join('')}</ul>` : '';
+    return `<div class="x-h">${esc(n.name)} · ${esc(n.level)} · ${num(n.score)}/100 · ${num(n.pods)} movable pod(s)${esc(n.removable ? ' · consolidation candidate' : '')}</div>${blockers}` +
+      (factors ? `<table class="x-table"><thead><tr><th>Factor</th><th>Points</th><th>Inputs</th></tr></thead><tbody>${factors}</tbody></table>` : '<p class="x-note">No scored factor applies.</p>') + unknowns;
+  }).join('');
+  const model = r.weights.map(w => `<li>${esc(w.code)}: max ${num(w.maxPoints)}, saturates at ${num(w.saturatesAt)} ${esc(w.unit)}. ${esc(w.description)}</li>`).join('');
+  return `<p class="x-summary">${esc(r.summary)}</p>${r.warnings.map(w => `<p class="x-note">${esc(w)}</p>`).join('')}${cards}` +
+    `<div class="x-h">Scoring model</div><ul class="x-list">${model}</ul><div class="x-h">Not modelled</div><ul class="x-list">${r.notModelled.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+}
+
+function renderRightsize(r) {
+  const unit = (kind, v) => kind === 'cpu' ? `${Math.round(num(v) * 1000)}m` : bytes(v);
+  const fmtUnit = (kind, v) => (num(v) > 0 ? esc(unit(kind, v)) : 'none set');
+  const rows = r.containers.map(c => ['cpu', 'memory'].filter(k => c[k]).map(k => { const x = c[k];
+    return `<tr><td>${esc(c.namespace)}/${esc(c.workload)}/${esc(c.container)}</td><td>${esc(k)}</td><td>${fmtUnit(k, x.current)}</td><td>${fmtUnit(k, x.optimistic)} / ${fmtUnit(k, x.expected)} / ${fmtUnit(k, x.conservative)}</td><td>${esc(x.basis)}</td></tr>`; }).join('')).join('');
+  const notes = r.containers.filter(c => c.notes.length).map(c => `<li>${esc(c.workload)}/${esc(c.container)} (${esc(c.status)}): ${joinEsc(c.notes, '; ')}</li>`).join('');
+  const scRows = r.scenarios.map(s => `<tr><td>${esc(s.name)}</td><td>${num(s.cpuRequestedCores)} cores / ${bytes(s.memoryRequestedBytes)}</td><td>${num(s.nodesBefore)} → ${num(s.nodesAfter)}</td><td>${joinEsc(s.removable) || 'none'}</td><td>${s.cost ? `${num(s.cost.monthlyDelta).toFixed(2)} ${esc(s.cost.currency)}` : ''}</td></tr>`).join('');
+  const missing = r.noUsageDataCount ? `<p class="x-note">No usage data for ${num(r.noUsageDataCount)} pod container(s); their requests stay unchanged: ${joinEsc(r.noUsageData)}</p>` : '';
+  return `<p class="x-summary">${esc(r.summary)}</p>` +
+    `<table class="x-table"><thead><tr><th>Scenario</th><th>Requested</th><th>Nodes</th><th>Removable</th><th>Monthly</th></tr></thead><tbody>${scRows}</tbody></table>` +
+    (r.scenarios[0].cost ? `<p class="x-note">${esc(r.scenarios[0].cost.note)}</p>` : '') + missing +
+    (rows ? `<div class="x-h">Recommendations (optimistic / expected / conservative)</div><table class="x-table"><thead><tr><th>Container</th><th>Resource</th><th>Now</th><th>Recommended</th><th>How it was computed</th></tr></thead><tbody>${rows}</tbody></table>` : '') +
+    (notes ? `<div class="x-h">Notes</div><ul class="x-list">${notes}</ul>` : '') +
+    `<div class="x-h">Not modelled</div><ul class="x-list">${r.notModelled.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+}
+
+function renderResilience(r) {
+  const div = r.diversity.map(d => `<tr><td>${esc(d.capacityType)}</td><td>${num(d.nodes)}</td><td>${num(d.instanceTypes)}</td><td>${num(d.zones)}</td><td>${pct(d.cpuShareOfCluster)}</td><td>${esc(d.largestPool)} (${pct(d.largestPoolShare)})</td></tr>`).join('');
+  const rows = r.scenarios.map(x => `<tr class="${esc(x.unschedulable > 0 || x.unmanaged > 0 ? "bad" : "good")}"><td>${esc(x.name)}</td><td>${esc(x.verdict)}</td><td>${num(x.nodes.length)} node(s), ${pct(x.cpuShare)} CPU</td><td>${num(x.evicted)} / ${num(x.unschedulable)} / ${num(x.unmanaged)}</td></tr>`).join('');
+  return `<p class="x-summary">${esc(r.summary)}</p>` +
+    `<table class="x-table"><thead><tr><th>Capacity</th><th>Nodes</th><th>Instance types</th><th>Zones</th><th>Cluster CPU</th><th>Largest pool</th></tr></thead><tbody>${div}</tbody></table>` +
+    `<div class="x-h">If this vanished</div><table class="x-table"><thead><tr><th>Scenario</th><th>Verdict</th><th>Size</th><th>Evicted / unschedulable / unmanaged</th></tr></thead><tbody>${rows}</tbody></table>` +
+    (r.findings.length ? `<div class="x-h">Findings</div><div>${r.findings.map(riskHTML).join('')}</div>` : '') +
+    (r.unknowns.length ? `<ul class="x-list">${r.unknowns.map(u => `<li>Unknown: ${esc(u)}</li>`).join('')}</ul>` : '') +
+    `<div class="x-h">Thresholds</div><ul class="x-list">${r.thresholds.map(x => `<li>${esc(x)}</li>`).join('')}</ul><div class="x-h">Not modelled</div><ul class="x-list">${r.notModelled.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+}
+
 function renderRollout(r) {
   const risks = r.risks.filter(x => String(x.code).startsWith('ROLLOUT_'));
   const rolling = r.changes.filter(c => c.action === 'changed' && c.kind === 'Deployment').length;
@@ -180,6 +221,11 @@ const exploreViews = {
   drain: {path: '/api/v1/drain', render: renderDrain, body: () => ({clusterYaml: $('cluster-editor').value, nodes: $('drain-nodes').value.split(',').map(s => s.trim()).filter(Boolean)}),
     check: () => $('drain-nodes').value.trim() ? '' : 'Enter at least one node name.'},
   consolidate: {path: '/api/v1/consolidate', render: renderConsolidate, body: () => ({clusterYaml: $('cluster-editor').value, prices: prices()})},
+  disruption: {path: '/api/v1/disruption', render: renderDisruption, body: () => ({clusterYaml: $('cluster-editor').value})},
+  resilience: {path: '/api/v1/resilience', render: renderResilience, body: () => ({clusterYaml: $('cluster-editor').value})},
+  rightsize: {path: '/api/v1/rightsize', render: renderRightsize,
+    body: () => ({clusterYaml: $('cluster-editor').value, usage: JSON.parse($('usage-input').value), options: {cpuMargin: parseFloat($('rs-cpu-margin').value), memoryMargin: parseFloat($('rs-mem-margin').value)}, prices: prices()}),
+    check: () => { const t = $('usage-input').value.trim(); if (!t) return 'Paste usage samples as JSON first.'; try { JSON.parse(t); } catch (e) { return 'The usage samples are not valid JSON.'; } return ''; }},
   rollout: {path: '/api/v1/simulate', render: renderRollout, body: () => ({clusterYaml: $('cluster-editor').value, desiredYaml: $('desired-editor').value})},
   api: {path: '/api/v1/simulate', render: renderAPI, body: () => ({clusterYaml: $('cluster-editor').value, desiredYaml: $('desired-editor').value, targetVersion: $('api-target').value})},
   explain: {path: '/api/v1/simulate', render: renderExplain, body: () => ({clusterYaml: $('cluster-editor').value, desiredYaml: $('desired-editor').value})},

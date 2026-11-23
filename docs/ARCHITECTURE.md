@@ -46,6 +46,18 @@ Kairo is split into four surfaces around one deterministic simulation package.
 
 `internal/sim/cost.go` converts user-supplied unit prices into a monthly delta (730 h). Consolidation prices removed nodes and reclaimed memory capacity; plan prices the requested CPU/memory delta as a share of an average node. Prices are validated (0 to 1e9) and never fetched from a cloud API. The result is flagged `estimate: true` with a basis and note.
 
+## Disruption risk
+
+`sim.DisruptionRisk` (`internal/sim/disruption.go`) scores each node from the pods bound to it. The weights and saturation points live in one table (`disruptionWeights`) that is returned in every result; points are `max x min(1, observed / saturation)`. Inputs: PDB `allowed` disruptions against what the node needs (shared with drain), owner replica counts, volumes, `topologySpreadConstraints` and required anti-affinity (detected only), and declared probes. Missing inputs are returned in `unknowns`, never defaulted. `removable` comes from `consolidateObjs`.
+
+## Right-sizing
+
+`sim.Rightsize` (`internal/sim/rightsize.go`) validates the supplied usage (finite, non-negative, bounded counts), matches each series to pods by namespace, workload (pod name, controller name, or Deployment name derived from a ReplicaSet) and container, and computes a nearest-rank percentile with a margin and floor. `quantileCI` gives a distribution-free confidence interval from the binomial distribution of order statistics; sides that the sample count cannot bound are flagged open. Four scenarios (current, optimistic, expected, conservative) re-parse the snapshot, overwrite the matched containers' requests, and run `consolidateObjs`, which is the consolidation engine without the YAML parse, so input objects are never shared between scenarios.
+
+## Resilience
+
+`sim.Resilience` (`internal/sim/resilience.go`) groups nodes by capacity type, instance type and zone labels and runs `drainObjs` on each spot or unknown pool and each zone with PodDisruptionBudget objects removed from the object list (involuntary loss ignores them). Scenario count is capped at 500 and the cap is reported.
+
 ## Admission checks
 
 `internal/sim/admission.go` overlays the proposed ResourceQuota/LimitRange objects on the snapshot, applies the API server's defaulting (request = explicit limit, then LimitRange `defaultRequest`/`default`), checks Container/Pod/PVC min, max and limit-request ratio, and compares projected namespace usage with each unscoped quota. Only increases are flagged, so a namespace already over quota is not blamed for an unrelated change. Usage counts workload objects (not their owned Pods/ReplicaSets/Jobs) to avoid double counting.

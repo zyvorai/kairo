@@ -80,8 +80,8 @@ func schemaProperties(spec string) map[string]map[string]bool {
 func TestEveryRegisteredRouteIsDocumented(t *testing.T) {
 	ops := documentedOperations(readSpec(t))
 	routes := Server{Web: nil}.Routes()
-	if len(routes) < 7 {
-		t.Fatalf("expected at least 7 routes, got %v", routes)
+	if len(routes) < 10 {
+		t.Fatalf("expected at least 10 routes, got %v", routes)
 	}
 	registered := map[string]bool{}
 	for _, r := range routes {
@@ -141,6 +141,24 @@ func TestSchemasMatchGoTypes(t *testing.T) {
 		"Utilization":        reflect.TypeOf(sim.Utilization{}),
 		"Prices":             reflect.TypeOf(sim.Prices{}),
 		"CostEstimate":       reflect.TypeOf(sim.CostEstimate{}),
+		"DisruptionRequest":  reflect.TypeOf(sim.DisruptionRequest{}),
+		"DisruptionResult":   reflect.TypeOf(sim.DisruptionResult{}),
+		"DisruptionNode":     reflect.TypeOf(sim.DisruptionNode{}),
+		"DisruptionFactor":   reflect.TypeOf(sim.DisruptionFactor{}),
+		"DisruptionWeight":   reflect.TypeOf(sim.DisruptionWeight{}),
+		"UsageSeries":        reflect.TypeOf(sim.UsageSeries{}),
+		"UsageData":          reflect.TypeOf(sim.UsageData{}),
+		"RightsizeOptions":   reflect.TypeOf(sim.RightsizeOptions{}),
+		"RightsizeRequest":   reflect.TypeOf(sim.RightsizeRequest{}),
+		"EffectiveOptions":   reflect.TypeOf(sim.EffectiveOptions{}),
+		"ResourceRec":        reflect.TypeOf(sim.ResourceRec{}),
+		"RightsizeContainer": reflect.TypeOf(sim.RightsizeContainer{}),
+		"RightsizeScenario":  reflect.TypeOf(sim.RightsizeScenario{}),
+		"RightsizeResult":    reflect.TypeOf(sim.RightsizeResult{}),
+		"ResilienceRequest":  reflect.TypeOf(sim.ResilienceRequest{}),
+		"ResilienceResult":   reflect.TypeOf(sim.ResilienceResult{}),
+		"ResilienceScenario": reflect.TypeOf(sim.ResilienceScenario{}),
+		"CapacityDiversity":  reflect.TypeOf(sim.CapacityDiversity{}),
 	}
 	for name, typ := range types {
 		doc, ok := props[name]
@@ -219,5 +237,72 @@ func TestSimulateAcceptsPrices(t *testing.T) {
 	}
 	if w := serve(t, "POST", "/api/v1/simulate", strings.Replace(body, "0.2", "-3", 1)); w.Code != 422 {
 		t.Errorf("negative price: %d", w.Code)
+	}
+}
+
+func TestDisruptionEndpoint(t *testing.T) {
+	cluster := `kind: Node\nmetadata: {name: a}\nstatus: {allocatable: {cpu: \"4\", memory: 8Gi}}`
+	cases := []struct {
+		name, body string
+		want       int
+		contains   string
+	}{
+		{"invalid json", `{`, 400, ""},
+		{"missing cluster", `{}`, 400, "clusterYaml is required"},
+		{"no nodes", `{"clusterYaml":"kind: Service\nmetadata: {name: s}"}`, 422, "no Node"},
+		{"ok", `{"clusterYaml":"` + cluster + `"}`, 200, `"weights"`},
+		{"too large", `{"clusterYaml":"` + strings.Repeat("a", 5<<20) + `"}`, 413, ""},
+	}
+	for _, c := range cases {
+		w := serve(t, "POST", "/api/v1/disruption", c.body)
+		if w.Code != c.want || !strings.Contains(w.Body.String(), c.contains) {
+			t.Errorf("%s: got %d %s", c.name, w.Code, w.Body)
+		}
+	}
+}
+
+func TestRightsizeEndpoint(t *testing.T) {
+	cluster := `kind: Node\nmetadata: {name: a}\nstatus: {allocatable: {cpu: \"4\", memory: 8Gi}}\n---\nkind: Pod\nmetadata: {name: w-1, ownerReferences: [{kind: ReplicaSet, name: w-abc}]}\nspec: {nodeName: a, containers: [{name: c, resources: {requests: {cpu: \"1\", memory: 1Gi}}}]}`
+	samples := strings.TrimSuffix(strings.Repeat("0.2,", 40), ",")
+	usage := `"usage":{"series":[{"workload":"w","container":"c","cpuCores":[` + samples + `]}]}`
+	cases := []struct {
+		name, body string
+		want       int
+		contains   string
+	}{
+		{"invalid json", `{`, 400, ""},
+		{"missing usage", `{"clusterYaml":"` + cluster + `"}`, 400, "usage.series are required"},
+		{"nan-like", `{"clusterYaml":"` + cluster + `","usage":{"series":[{"workload":"w","container":"c","cpuCores":[-1]}]}}`, 422, "finite non-negative"},
+		{"bad option", `{"clusterYaml":"` + cluster + `",` + usage + `,"options":{"cpuPercentile":7}}`, 422, "cpuPercentile"},
+		{"wrong type", `{"clusterYaml":"` + cluster + `","usage":{"series":[{"workload":"w","container":"c","cpuCores":"x"}]}}`, 400, "invalid JSON"},
+		{"ok", `{"clusterYaml":"` + cluster + `",` + usage + `,"prices":{"nodeHourPrice":1}}`, 200, `"scenarios"`},
+		{"too large", `{"clusterYaml":"` + strings.Repeat("a", 5<<20) + `"}`, 413, ""},
+	}
+	for _, c := range cases {
+		w := serve(t, "POST", "/api/v1/rightsize", c.body)
+		if w.Code != c.want || !strings.Contains(w.Body.String(), c.contains) {
+			t.Errorf("%s: got %d %s", c.name, w.Code, w.Body)
+		}
+	}
+}
+
+func TestResilienceEndpoint(t *testing.T) {
+	cluster := `kind: Node\nmetadata: {name: a, labels: {karpenter.sh/capacity-type: spot}}\nstatus: {allocatable: {cpu: \"4\", memory: 8Gi}}`
+	cases := []struct {
+		name, body string
+		want       int
+		contains   string
+	}{
+		{"invalid json", `{`, 400, ""},
+		{"missing cluster", `{}`, 400, "clusterYaml is required"},
+		{"no nodes", `{"clusterYaml":"kind: Service\nmetadata: {name: s}"}`, 422, "no Node"},
+		{"ok", `{"clusterYaml":"` + cluster + `"}`, 200, `"scenarios"`},
+		{"too large", `{"clusterYaml":"` + strings.Repeat("a", 5<<20) + `"}`, 413, ""},
+	}
+	for _, c := range cases {
+		w := serve(t, "POST", "/api/v1/resilience", c.body)
+		if w.Code != c.want || !strings.Contains(w.Body.String(), c.contains) {
+			t.Errorf("%s: got %d %s", c.name, w.Code, w.Body)
+		}
 	}
 }

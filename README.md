@@ -3,7 +3,7 @@
 # Kairo
 
 [![CI](https://github.com/zyvorai/kairo/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/kairo/actions/workflows/ci.yml)
-[![License: Zyvor Production 1.0](https://img.shields.io/badge/License-Zyvor_Production_1.0-1d1d1f.svg)](LICENSE)
+[![License: Zyvor Production 2.0](https://img.shields.io/badge/License-Zyvor_Production_2.0-1d1d1f.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg)](go.mod)
 
 [![Book a demo](https://img.shields.io/badge/Book_a_demo-0071e3?style=for-the-badge)](https://zyvor.dev/schedule?utm_source=github&utm_medium=kairo&utm_campaign=readme_hero)
@@ -36,6 +36,9 @@
 | A strict PodDisruptionBudget blocks the drain mid-change | Strict PDB detection and a drain simulation |
 | The API server rejects pods over a namespace quota or outside its LimitRange | `ADMISSION_QUOTA_*` and `ADMISSION_LIMITRANGE_*` findings before apply |
 | The cluster is half empty and nobody knows which nodes could go | `kairo consolidate`: which nodes can be emptied, and what that frees (with optional price inputs for a monthly estimate) |
+| Requests are far above real usage and nobody can say what right-sizing would free | `kairo rightsize`: requests from your usage samples with an explicit margin, and nodes/cost as an optimistic-expected-conservative band |
+| Which node is the safest to remove first | `kairo disruption`: a transparent per-node score from PDBs, single replicas, local state, placement constraints and probe startup time |
+| One spot pool or zone disappears | `kairo resilience`: pool and zone loss simulation plus instance-type and zone concentration |
 | Reviewers read YAML diffs and guess the risk | A blast-radius score, a LOW/MEDIUM/HIGH level and a SAFE/REVIEW/BLOCK verdict |
 | CI has no way to stop a risky change | `kairo plan` exits `3` on BLOCK, with `-json` output for pipelines |
 
@@ -177,6 +180,31 @@ Bin-packs the existing controller-managed pods onto fewer nodes with the same pl
 
 The plan is a deterministic greedy heuristic (emptiest node first, best-fit decreasing): achievable, not guaranteed minimal. Every result carries a `notModelled` list: pod/node affinity, topology spread, PersistentVolume topology and attach limits, observed usage (only requests are used, so this is not per-pod request right-sizing), max-pods and reservations, priority/preemption, node pools and autoscaler policies, and PDBs evolving over time.
 
+### Disruption risk per node
+
+```bash
+./bin/kairo disruption -cluster examples/consolidate-cluster.yaml
+./bin/kairo disruption -cluster snapshot.yaml -format json
+```
+
+Scores how disruptive removing each node would be, least disruptive first, so you can pick the node to drain or consolidate first. The score is a 100-point weighted sum and every result carries the weights: PodDisruptionBudget pressure (25), single-replica workloads (20), multi-replica workloads whose every pod is on the node (15), local state such as emptyDir disk, hostPath and PersistentVolumeClaims (15), pods with topology spread or required anti-affinity (10; detected, not evaluated) and the slowest declared probe startup budget (15). Each factor shows its points and the pods behind it. Hard blockers (a pod without a controller, `do-not-disrupt` or `safe-to-evict=false`, a node annotated `karpenter.sh/do-not-disrupt`) give the level `BLOCKED`. Startup time is read only from `startupProbe`/`readinessProbe`; pods without probes are listed under `unknowns` and are not scored, and nothing is defaulted. `removable` marks nodes `consolidate` can empty. The weights are judgement calls, labelled as such.
+
+### Right-sizing what-if
+
+```bash
+./bin/kairo rightsize -cluster examples/rightsize-cluster.yaml -usage examples/usage.json -node-hour-price 0.2 -currency USD
+```
+
+You supply usage samples exported from your metrics system (`{"series":[{"namespace","workload","container","cpuCores":[...],"memoryBytes":[...]}]}`; `workload` is a pod, controller or Deployment name). For each container Kairo takes a percentile (default CPU p95, memory p99), adds an explicit margin (default +15% CPU, +20% memory), applies a floor (10m, 32 MiB) and rounds up; `-cpu-percentile`, `-memory-percentile`, `-cpu-margin`, `-memory-margin`, `-min-samples` (default 30) and `-confidence` change the model. The uncertainty band is a distribution-free confidence interval of the percentile (default 90%) computed from the order statistics: optimistic uses its lower bound, expected the observed percentile, conservative the upper bound. When there are too few samples to bound a side, the interval is reported as open (a peak-based memory percentile of 1 is always open above) instead of being invented. Each scenario rewrites the matched pods' requests and re-runs the consolidation engine, so the result shows requested CPU/memory, removable nodes and (with prices) the monthly cost for today, optimistic, expected and conservative requests. Series with fewer than `-min-samples` samples leave that resource unchanged, series that match no pod are reported as `unmatched`, and containers with no usage data are listed under `noUsageData`; nothing is defaulted. Notes flag samples above the recommendation (OOM risk), recommendations above the container limit, under-requested containers and idle (all-zero) series. NaN, infinite, negative or oversized input is rejected (400/422). Kairo never changes requests; apply them yourself, for example with in-place resize.
+
+### Pool and zone loss
+
+```bash
+./bin/kairo resilience -cluster examples/spot-cluster.yaml
+```
+
+Reads `karpenter.sh/capacity-type` (or the EKS, GKE spot and AKS spot equivalents), `node.kubernetes.io/instance-type` and `topology.kubernetes.io/zone` from the nodes, reports how many instance types and zones each capacity type spans and the largest pool's share of its CPU, then simulates losing each spot (or unknown-capacity) pool and each zone at once. PodDisruptionBudgets are ignored on purpose: a cloud reclaim does not honour them. Findings: `RESILIENCE_LOSS_UNSCHEDULABLE`, `RESILIENCE_WORKLOAD_IN_ONE_POOL`, `RESILIENCE_POOL_CONCENTRATION` (one pool above 50% of a capacity type's CPU) and `RESILIENCE_FEW_INSTANCE_TYPES` (fewer than 3 spot types); the thresholds are judgement calls and are returned in `thresholds`. Nodes missing labels are listed under `unknowns` and grouped as `unknown`. Replacement capacity and interruption probability are not modelled.
+
 ### Cost estimates
 
 `plan` and `consolidate` accept optional prices: `-node-hour-price`, `-gib-hour-price` and a `-currency` label (API: `prices: {nodeHourPrice, gibHourPrice, currency}`). They produce a `cost` object with a monthly delta over a fixed 730-hour month, negative for savings. For `consolidate` the node part is removed nodes times the node-hour price and the memory part is reclaimed GiB times the GiB-hour price. For `plan` the node part is the larger of the CPU and memory deltas as a proportional share of an average snapshot node, and the memory part prices the requested-memory delta. Use the GiB price only when memory is billed separately from the node, otherwise memory is counted twice. It is always labelled an estimate from your prices; Kairo makes no cloud pricing API calls, and with no prices there is no `cost` field.
@@ -221,11 +249,11 @@ Request shape:
 }
 ```
 
-`targetVersion` and `prices` are optional. `POST /api/v1/consolidate` takes `{"clusterYaml": "...", "prices": {...}}` and returns the consolidation plan. `POST /api/v1/drain` takes `{"clusterYaml": "...", "nodes": ["worker-a"]}` and returns the drain result (`verdict`, `pods[]`, `risks[]`, counters). Invalid input returns 400, unknown node, bad target version or invalid prices 422. The full contract is in [`docs/openapi.yaml`](docs/openapi.yaml); a test fails when a registered route or a response field is missing from it.
+`targetVersion` and `prices` are optional. `POST /api/v1/consolidate` takes `{"clusterYaml": "...", "prices": {...}}` and returns the consolidation plan. `POST /api/v1/disruption` and `POST /api/v1/resilience` take `{"clusterYaml": "..."}`; `POST /api/v1/rightsize` takes `{"clusterYaml": "...", "usage": {"series": [...]}, "options": {...}, "prices": {...}}`. `POST /api/v1/drain` takes `{"clusterYaml": "...", "nodes": ["worker-a"]}` and returns the drain result (`verdict`, `pods[]`, `risks[]`, counters). Invalid input returns 400, unknown node, bad target version or invalid prices 422. The full contract is in [`docs/openapi.yaml`](docs/openapi.yaml); a test fails when a registered route or a response field is missing from it.
 
 ### Web console
 
-Beyond the plan simulator, the embedded console (`kairo serve`) has views for node drain, consolidation, rollout surge, API removal (with a target-version selector) and the `plan -explain` change list, plus optional price inputs. They call the same REST endpoints on the snapshot and proposal in the editors.
+Beyond the plan simulator, the embedded console (`kairo serve`) has views for node drain, consolidation, disruption risk, right-sizing, pool loss, rollout surge, API removal (with a target-version selector) and the `plan -explain` change list, plus optional price inputs. They call the same REST endpoints on the snapshot and proposal in the editors.
 
 ## Get a real cluster snapshot
 
