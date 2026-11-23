@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/zyvorai/kairo/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/kairo/actions/workflows/ci.yml)
 [![License: Zyvor Production 1.0](https://img.shields.io/badge/License-Zyvor_Production_1.0-1d1d1f.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.23%2B-00ADD8.svg)](go.mod)
+[![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg)](go.mod)
 
 [![Book a demo](https://img.shields.io/badge/Book_a_demo-0071e3?style=for-the-badge)](https://zyvor.dev/schedule?utm_source=github&utm_medium=kairo&utm_campaign=readme_hero)
 [![30-day PoC](https://img.shields.io/badge/30--day_PoC-000000?style=for-the-badge)](https://zyvor.dev/poc?utm_source=github&utm_medium=kairo&utm_campaign=readme_hero)
@@ -52,6 +52,10 @@
 - PVC shrink detection.
 - NetworkPolicy, CiliumNetworkPolicy and CiliumClusterwideNetworkPolicy change warnings.
 - Strict PodDisruptionBudget detection.
+- Security findings introduced by a change: privileged containers, `hostNetwork`, `hostPID`, `hostPath` volumes, privilege escalation (not re-flagged when already live).
+- Exposure and access control: new `LoadBalancer`/`NodePort` Services, Ingress changes, wildcard Roles/ClusterRoles, `cluster-admin` bindings.
+- `kairo plan -format text|json|markdown` (markdown is ready to post as a PR comment) and `-fail-on BLOCK|REVIEW|never` for CI gating.
+- YAML flow collections with plain scalars (`{name: web, ports: [80, 443]}`) are parsed, not just JSON-style ones.
 - ResourceQuota pressure checks.
 - Blast-radius score, LOW/MEDIUM/HIGH level and SAFE/REVIEW/BLOCK verdict.
 - CLI, JSON REST API and polished zero-build web UI.
@@ -90,7 +94,7 @@ Simulation lifecycle, and why the engine does not pretend to be kube-scheduler: 
 
 ## Quickstart
 
-Requires Go 1.23+.
+Requires Go 1.26+.
 
 ```bash
 go run ./cmd/kairo serve

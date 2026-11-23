@@ -306,6 +306,9 @@ func parseScalar(s string) any {
 		if json.Unmarshal([]byte(strings.ReplaceAll(s, "'", "\"")), &v) == nil {
 			return v
 		}
+		if v, ok := parseFlow(s); ok {
+			return v
+		}
 	}
 	if (strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"")) || (strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'")) {
 		return unquote(s)
